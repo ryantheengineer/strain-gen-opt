@@ -38,6 +38,27 @@ def place_circle(x,y,radius):
     circle = Point(x, y).buffer(radius)
     return circle
 
+def random_perturb(poly, maxmag):
+    while True:
+        xp = random.uniform(-maxmag, maxmag)
+        yp = random.uniform(-maxmag, maxmag)
+        magnitude = np.sqrt(xp**2 + yp**2)
+        if magnitude > maxmag:
+            continue
+        else:
+            break
+    
+    # Adjust polygon by perturbation
+    xe, ye = poly.exterior.xy
+    xe = list(xe)
+    ye = list(ye)
+    xe_perturb = [x+xp for x in xe]
+    ye_perturb = [y+yp for y in ye]
+    xpyp = zip(xe_perturb, ye_perturb)
+    xpyp = tuple(xpyp)
+    poly_perturb = Polygon(xpyp)
+    return poly_perturb
+        
 
 if __name__ == "__main__":
     
@@ -50,7 +71,8 @@ if __name__ == "__main__":
     max_rect = 20.
     n_circles = 10
     radius = 2.
-    resolution = 5.
+    resolution = 8.
+    perturb = 2.
     
     UUT_poly = UUT_square(maxbnd)
     
@@ -90,6 +112,12 @@ if __name__ == "__main__":
     # Validate that each circle falls inside shape
     valid_circles = []
     valid_circles.extend(filter(UUT_poly.contains, circles))
+    
+    # Randomly perturb each circle
+    for i,circle in enumerate(valid_circles):
+        valid_circles[i] = random_perturb(circle, perturb)
+    
+    valid_circles = list(filter(UUT_poly.contains, valid_circles))
     
     # # Randomly place circles
     # circles = []
