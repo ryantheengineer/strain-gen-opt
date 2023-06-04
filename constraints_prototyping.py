@@ -8,6 +8,7 @@ This is a temporary script file.
 from shapely.geometry import Point, Polygon
 from shapely.prepared import prep
 from shapely import buffer
+from shapely.ops import unary_union
 import matplotlib.pyplot as plt
 # import pandas as pd
 import random
@@ -73,7 +74,7 @@ if __name__ == "__main__":
     n_circles = 10
     radius = 2.
     resolution = 8.
-    perturb = 2.
+    perturb = 1.
     
     UUT_poly = UUT_square(maxbnd)
     
@@ -98,22 +99,28 @@ if __name__ == "__main__":
     for interior in interiors:
         UUT_poly = UUT_poly.difference(interior)
         
-    
-    # Place circles on grid within UUT
-    xmin, ymin, xmax, ymax = UUT_poly.bounds
-    
-    
-    # Dilate UUT so no variable components can be placed in incompatible locations
+    # Dilate UUT so no variable components can be placed in incompatible
+    # locations
     UUT_poly_ext = Polygon(UUT_poly.exterior.coords)
     UUT_poly_dilated_ext = buffer(UUT_poly_ext,-2)
     interiors_dilated = []
     for inner in UUT_poly.interiors:
         UUT_poly_int = Polygon(inner.coords)
         interiors_dilated.append(buffer(inner,2))
-        
-    # for interior in interiors_dilated:
-    #     UUT_poly_dilated = UUT_poly_dilated.difference(interior)
     
+    print(f"Before:\t{len(interiors_dilated)}")
+    # Unary union of dilated interiors
+    interiors_dilated = unary_union(interiors_dilated)
+    interiors_dilated = list(interiors_dilated.geoms)
+    print(f"After:\t{len(interiors_dilated)}")
+    
+    UUT_poly_dilated = UUT_poly_dilated_ext
+    for inner in interiors_dilated:
+        UUT_poly_dilated = UUT_poly_dilated.difference(inner)
+    
+    
+    # Place circles on grid within UUT
+    xmin, ymin, xmax, ymax = UUT_poly.bounds
     circles = []
     for x in np.arange(xmin, xmax, resolution):
         for y in np.arange(ymin, ymax, resolution):
@@ -162,6 +169,13 @@ if __name__ == "__main__":
     ax.plot(xe, ye, color="blue", label="UUT")
     
     # Plot Dilated Polygon
+    # xe, ye = UUT_poly_dilated.exterior.xy
+    # for inner in UUT_poly_dilated.interiors:
+    #     xi, yi = zip(*inner.coords[:])
+    #     ax.plot(xi, yi, color="green")
+     
+    # ax.plot(xe, ye, color="green", label="UUT Offset")
+    
     xe, ye = UUT_poly_dilated_ext.exterior.xy
     for inner in interiors_dilated:
         xi, yi = inner.exterior.xy
