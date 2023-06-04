@@ -7,6 +7,7 @@ This is a temporary script file.
 
 from shapely.geometry import Point, Polygon
 from shapely.prepared import prep
+from shapely import buffer
 import matplotlib.pyplot as plt
 # import pandas as pd
 import random
@@ -101,7 +102,17 @@ if __name__ == "__main__":
     # Place circles on grid within UUT
     xmin, ymin, xmax, ymax = UUT_poly.bounds
     
-    prep_UUT_poly = prep(UUT_poly)
+    
+    # Dilate UUT so no variable components can be placed in incompatible locations
+    UUT_poly_ext = Polygon(UUT_poly.exterior.coords)
+    UUT_poly_dilated_ext = buffer(UUT_poly_ext,-2)
+    interiors_dilated = []
+    for inner in UUT_poly.interiors:
+        UUT_poly_int = Polygon(inner.coords)
+        interiors_dilated.append(buffer(inner,2))
+        
+    # for interior in interiors_dilated:
+    #     UUT_poly_dilated = UUT_poly_dilated.difference(interior)
     
     circles = []
     for x in np.arange(xmin, xmax, resolution):
@@ -139,7 +150,8 @@ if __name__ == "__main__":
     #             continue
     
     
-    fig, ax = plt.subplots()
+    fig, ax = plt.subplots(dpi=300)
+    ax.axis('equal')
     
     # Plot Polygon
     xe, ye = UUT_poly.exterior.xy
@@ -147,12 +159,22 @@ if __name__ == "__main__":
         xi, yi = zip(*inner.coords[:])
         ax.plot(xi, yi, color="blue")
      
-    ax.plot(xe, ye, color="blue")
+    ax.plot(xe, ye, color="blue", label="UUT")
+    
+    # Plot Dilated Polygon
+    xe, ye = UUT_poly_dilated_ext.exterior.xy
+    for inner in interiors_dilated:
+        xi, yi = inner.exterior.xy
+        ax.plot(xi, yi, color="green")
+     
+    ax.plot(xe, ye, color="green", label="UUT Offset")
+    
     
     # Plot circles
     for circle in valid_circles:
         xe, ye = circle.exterior.xy
         ax.plot(xe, ye, color="red")
+    plt.legend()
     plt.show()
     
      
