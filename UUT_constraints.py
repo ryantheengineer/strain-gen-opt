@@ -102,6 +102,4 @@ def max_pressure_rods(UUT_poly, pressure_rod_ctc):
     
     return max_rods, xoff, yoff
     
-    
-            
-        
+
