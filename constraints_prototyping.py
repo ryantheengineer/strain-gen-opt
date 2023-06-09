@@ -5,7 +5,7 @@ Spyder Editor
 This is a temporary script file.
 """
 
-from shapely.geometry import Point, Polygon
+from shapely.geometry import Point, Polygon, MultiPolygon
 from shapely.prepared import prep
 from shapely import buffer
 from shapely.ops import unary_union
@@ -67,14 +67,14 @@ if __name__ == "__main__":
     # Create a random UUT board with some rectangular features that should be
     # avoided by circles. Plot these in blue. Create a series of random circles
     # to represent pins that do not conflict with any features in the UUT.
-    maxbnd = 100.
+    maxbnd = 12.
     n_rectangles = 20
-    min_rect = 2.
-    max_rect = 20.
+    min_rect = 0.2
+    max_rect = 2.0
     n_circles = 10
-    radius = 2.
-    resolution = 8.
-    perturb = 1.
+    radius = 0.125
+    resolution = 0.375
+    perturb = 0.1
     
     UUT_poly = UUT_square(maxbnd)
     
@@ -101,12 +101,14 @@ if __name__ == "__main__":
         
     # Dilate UUT so no variable components can be placed in incompatible
     # locations
+    bufferdist_edge = radius
+    bufferdist_component = 0.0625
     UUT_poly_ext = Polygon(UUT_poly.exterior.coords)
-    UUT_poly_dilated_ext = buffer(UUT_poly_ext,-2)
+    UUT_poly_dilated_ext = buffer(UUT_poly_ext,-bufferdist_edge)
     interiors_dilated = []
     for inner in UUT_poly.interiors:
         UUT_poly_int = Polygon(inner.coords)
-        interiors_dilated.append(buffer(inner,2))
+        interiors_dilated.append(buffer(inner,bufferdist_component))
     
     print(f"Before:\t{len(interiors_dilated)}")
     # Unary union of dilated interiors
@@ -114,28 +116,35 @@ if __name__ == "__main__":
     interiors_dilated = list(interiors_dilated.geoms)
     print(f"After:\t{len(interiors_dilated)}")
     
+    # Subtract dilated interiors from dilated exterior
     UUT_poly_dilated = UUT_poly_dilated_ext
     for inner in interiors_dilated:
+        inner = Polygon(inner.exterior.coords)
         UUT_poly_dilated = UUT_poly_dilated.difference(inner)
     
     
     # Place circles on grid within UUT
     xmin, ymin, xmax, ymax = UUT_poly.bounds
     circles = []
+    # NOTE: 
     for x in np.arange(xmin, xmax, resolution):
         for y in np.arange(ymin, ymax, resolution):
             c = place_circle(x, y, radius)
             circles.append(c)
     
-    # Validate that each circle falls inside shape
-    valid_circles = []
-    valid_circles.extend(filter(UUT_poly.contains, circles))
+    
+    # valid_circles.extend(filter(UUT_poly.contains, circles))
     
     # Randomly perturb each circle
-    for i,circle in enumerate(valid_circles):
-        valid_circles[i] = random_perturb(circle, perturb)
+    for i,circle in enumerate(circles):
+        circles[i] = random_perturb(circle, perturb)
+        # NOTE: Add check here to make sure no circles overlap with other circles
     
-    valid_circles = list(filter(UUT_poly.contains, valid_circles))
+    # Validate that each circle falls inside shape
+    valid_circles = []
+    valid_circles.extend(filter(UUT_poly_dilated.contains, circles))
+    
+    # valid_circles = list(filter(UUT_poly.contains, valid_circles))
     
     # # Randomly place circles
     # circles = []
@@ -169,19 +178,35 @@ if __name__ == "__main__":
     ax.plot(xe, ye, color="blue", label="UUT")
     
     # Plot Dilated Polygon
+    if UUT_poly_dilated.geom_type == 'MultiPolygon':
+        UUT_poly_dilated_polys = list(UUT_poly_dilated.geoms)
+        for poly in UUT_poly_dilated_polys:
+            xe, ye = poly.exterior.xy
+            ax.plot(xe, ye, color="green", label="UUT Offset")
+            for inner in poly.interiors:
+                xi, yi = zip(*inner.coords[:])
+                ax.plot(xi, yi, color="green")
+    elif UUT_poly_dilated.geom_type == 'Polygon':
+        xe, ye = UUT_poly_dilated.exterior.xy
+        ax.plot(xe, ye, color="green", label="UUT Offset")
+        for inner in UUT_poly_dilated.interiors:
+            xi, yi = zip(*inner.coords[:])
+            ax.plot(xi, yi, color="green")
+    else:
+        raise IOError('Dilated UUT boundary is not a polygon.')
+    
     # xe, ye = UUT_poly_dilated.exterior.xy
     # for inner in UUT_poly_dilated.interiors:
     #     xi, yi = zip(*inner.coords[:])
     #     ax.plot(xi, yi, color="green")
      
-    # ax.plot(xe, ye, color="green", label="UUT Offset")
     
-    xe, ye = UUT_poly_dilated_ext.exterior.xy
-    for inner in interiors_dilated:
-        xi, yi = inner.exterior.xy
-        ax.plot(xi, yi, color="green")
+    # xe, ye = UUT_poly_dilated_ext.exterior.xy
+    # for inner in interiors_dilated:
+    #     xi, yi = inner.exterior.xy
+    #     ax.plot(xi, yi, color="green")
      
-    ax.plot(xe, ye, color="green", label="UUT Offset")
+    # ax.plot(xe, ye, color="green", label="UUT Offset")
     
     
     # Plot circles
