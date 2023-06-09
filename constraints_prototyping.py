@@ -68,7 +68,7 @@ if __name__ == "__main__":
     # avoided by circles. Plot these in blue. Create a series of random circles
     # to represent pins that do not conflict with any features in the UUT.
     maxbnd = 12.
-    n_rectangles = 20
+    n_rectangles = 30
     min_rect = 0.2
     max_rect = 2.0
     n_circles = 10
@@ -138,11 +138,13 @@ if __name__ == "__main__":
     # Randomly perturb each circle
     for i,circle in enumerate(circles):
         circles[i] = random_perturb(circle, perturb)
-        # NOTE: Add check here to make sure no circles overlap with other circles
+        # NOTE: Before accepting randomly perturbed circle, make sure it is 
+        # within spec. Force rods can't be too close together.
     
     # Validate that each circle falls inside shape
     valid_circles = []
     valid_circles.extend(filter(UUT_poly_dilated.contains, circles))
+    # NOTE: Add check here to make sure no circles overlap with other circles
     
     # valid_circles = list(filter(UUT_poly.contains, valid_circles))
     
