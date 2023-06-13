@@ -14,6 +14,39 @@ import matplotlib.pyplot as plt
 import random
 import numpy as np
 
+
+class ForceRod:
+    def __init__(self,x,y,radius,offset):
+        self.x = x
+        self.y = y
+        self.radius = radius
+        self.offset = offset
+        self.circle = place_circle(x,y,radius)
+        self.bufferzone = buffer(self.circle,self.offset)
+        
+    def perturb_rod(self,maxperturb):
+        while True:
+            xp = random.uniform(-maxperturb, maxperturb)
+            yp = random.uniform(-maxperturb, maxperturb)
+            magnitude = np.sqrt(xp**2 + yp**2)
+            if magnitude > maxperturb:
+                continue
+            else:
+                break
+        
+        # Adjust polygon by perturbation
+        xe, ye = poly.exterior.xy
+        xe = list(xe)
+        ye = list(ye)
+        xe_perturb = [x+xp for x in xe]
+        ye_perturb = [y+yp for y in ye]
+        xpyp = zip(xe_perturb, ye_perturb)
+        xpyp = tuple(xpyp)
+        poly_perturb = Polygon(xpyp)
+        self.circle = poly_perturb
+        self.bufferzone = buffer(self.circle,self.offset)
+    
+
 def UUT_square(maxbnd):
     coords = ((0.,0.),(0.,maxbnd),(maxbnd,maxbnd),(maxbnd,0.),(0.,0.))
     poly = Polygon(coords)
