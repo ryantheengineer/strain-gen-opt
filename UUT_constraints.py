@@ -76,7 +76,7 @@ def pressure_rod_type(type_selection):
 
 # pressure_rod_ctc = 0.375    # Pressure rod center to center spacing, inches
 
-def max_pressure_rods(UUT_poly, pressure_rod_ctc):
+def get_max_pressure_rods(UUT_poly, pressure_rod_ctc):
     # Get the bounding box of the UUT polygon exterior
     xmin, ymin, xmax, ymax = UUT_poly.bounds
     
@@ -101,5 +101,35 @@ def max_pressure_rods(UUT_poly, pressure_rod_ctc):
                 yoff = y_offset
     
     return max_rods, xoff, yoff
-    
 
+def get_max_board_stops(UUT_poly, board_stop_ctc):
+    pass
+    
+def build_gene_space(UUT_poly, pressure_rod_ctc, board_stop_ctc):
+    # Determine from the design of the UUT and components what the maximum
+    # possible number of pins and other holding features is, and construct a 
+    # gene_space list. The structure of the gene_space list is:
+        # n binary-value genes for turning pins on or off
+        # 3n float-value genes for x, y, and radius values of pins
+        #
+    gene_space = []
+    binary_vals = [0,1]
+    
+    xmin, ymin, xmax, ymax = UUT_poly.bounds
+    max_force_rods, xoff, yoff = get_max_pressure_rods(UUT_poly, pressure_rod_ctc)
+    
+    # Add top pressure rods
+    for i in range(max_force_rods):
+        gene_space.append({'low': xmin, 'high': xmax},
+                          {'low': ymin, 'high': ymax},
+                          binary_vals)
+    
+    max_board_stops = get_max_board_stops(UUT_poly, board_stop_ctc)
+    
+    # Add board stops
+    for i in range(max_board_stops):
+        gene_space.append({'low': xmin, 'high': xmax},
+                          {'low': ymin, 'high': ymax},
+                          binary_vals)
+        
+    return gene_space
