@@ -15,6 +15,17 @@ def get_circle(x,y,radius):
     circle = Point(x, y).buffer(radius)
     return circle
 
+def create_chromosome(ncircles,xmin,xmax,ymin,ymax,radius_sizes):
+    # Initialize random chromosome, where the first ncircles entries are
+    # the x coordinates, the next ncircles entries are y coordinates, then
+    # radii, and on/off binary values
+    chromosome = []
+    chromosome.extend([random.uniform(xmin,xmax) for _ in range(ncircles)])
+    chromosome.extend([random.uniform(ymin,ymax) for _ in range(ncircles)])
+    chromosome.extend([random.choice(radius_sizes) for _ in range(ncircles)])
+    chromosome.extend([random.randint(0,1) for _ in range(ncircles)])
+    return chromosome
+
 def interpret_chromosome(ncircles,chromosome):
     # Interpret the chromosome and create circles (Polygons) at the proper
     # positions and sizes
@@ -48,16 +59,9 @@ if __name__ == "__main__":
     ymin = 10.
     ymax = 20.
     radius_sizes = [0.1, 0.2, 0.3]
-    ncircles = 10
+    ncircles = 50
     
-    # Initialize random chromosome, where the first ncircles entries are
-    # the x coordinates, the next ncircles entries are y coordinates, then
-    # radii, and on/off binary values
-    chromosome = []
-    chromosome.extend([random.uniform(xmin,xmax) for _ in range(ncircles)])
-    chromosome.extend([random.uniform(ymin,ymax) for _ in range(ncircles)])
-    chromosome.extend([random.choice(radius_sizes) for _ in range(ncircles)])
-    chromosome.extend([random.randint(0,1) for _ in range(ncircles)])
+    chromosome = create_chromosome(ncircles,xmin,xmax,ymin,ymax,radius_sizes)
     
     # Interpret the chromosome into the individual circles it defines
     circles = interpret_chromosome(ncircles,chromosome)
