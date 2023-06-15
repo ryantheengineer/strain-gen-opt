@@ -13,6 +13,7 @@ import matplotlib.pyplot as plt
 # import pandas as pd
 import random
 import numpy as np
+import math
 
 
 class ForceRod:
@@ -63,11 +64,60 @@ def random_rectangle(mindim,maxdim,maxbnd):
     poly = Polygon(coords)
     return poly
 
+def get_max_circles(poly, radius, offset):
+    '''
+    
+
+    Parameters
+    ----------
+    poly : Shapely Polygon
+        UUT_poly with holes subtracted from it. It needs to give the accurate
+        available area when the poly.area attribute is called.
+    radius : TYPE
+        DESCRIPTION.
+    offset : TYPE
+        DESCRIPTION.
+
+    Returns
+    -------
+    TYPE
+        DESCRIPTION.
+
+    '''
+    # Calculate the maximum number of circles that can fit based on the circle size and minimum distance
+    return math.floor(poly.area / (math.pi * (radius + offset)**2))
+
 def random_circle(radius,maxbnd):
     x = random.uniform(radius,maxbnd-radius)
     y = random.uniform(radius,maxbnd-radius)
     circle = Point(x, y).buffer(radius)
     return circle
+
+# def generate_random_circle(main_polygon, circles, circle_size, min_dist):
+#     # ChatGPT random circle function. Alter this later to work with existing code.
+#     # I like that it doesn't generate a new circle until it satisfies the
+#     # requirements, but it could easily get stuck in a while loop. Needs a 
+#     # heuristic to determine whether a new circle is possible, such as 
+#     # determining the available area that remains and setting a target percentage
+#     # for coverage (65% seems to be a good standard based on tests so far)
+#     while True:
+#         # Generate a random point within the main polygon
+#         x = random.uniform(main_polygon.bounds[0], main_polygon.bounds[2])
+#         y = random.uniform(main_polygon.bounds[1], main_polygon.bounds[3])
+#         center = Point(x, y)
+
+#         # Create the new circle
+#         new_circle = Circle(center, circle_size)
+
+#         # Check if the new circle overlaps any previously placed circles
+#         if any(existing_circle.intersects(new_circle) for existing_circle in circles):
+#             continue
+
+#         # Check if the new circle satisfies the minimum distance (offset) requirement
+#         if any(existing_circle.distance(new_circle) < min_dist for existing_circle in circles):
+#             continue
+
+#         return new_circle
 
 def place_circle(x,y,radius):
     circle = Point(x, y).buffer(radius)
@@ -155,6 +205,7 @@ if __name__ == "__main__":
         inner = Polygon(inner.exterior.coords)
         UUT_poly_dilated = UUT_poly_dilated.difference(inner)
     
+    max_circles = get_max_circles(UUT_poly_dilated, radius, bufferdist_component)
     
     # Place circles on grid within UUT
     xmin, ymin, xmax, ymax = UUT_poly.bounds
@@ -261,3 +312,5 @@ if __name__ == "__main__":
     # ax.plot(xe, ye, color="blue")
     # # ax.axis([0, 100, 0, 100])
     # plt.show()
+    
+    print(f"{100*len(valid_circles)/max_circles}% circles placed")
