@@ -11,8 +11,31 @@ import pathlib
 import pandas as pd
 from tkinter import Tk
 from tkinter import filedialog as fd
+import pickle
 
+def chooseFEApath(initialdir):
+    filetypes = (("Executable", ["*.exe"]),)
+    
+    root = Tk()
+    root.wm_attributes('-topmost', 1)
+    FEApath = fd.askopenfilename(
+            title="Select FEA executable",
+            initialdir=initialdir,
+            filetypes=filetypes
+            )
+    root.destroy()
+    
+    filename = 'FEApath.pk'
+    
+    with open(filename, 'wb') as fi:
+        # dump data into file
+        pickle.dump(FEApath, fi)
+    return FEApath
 
+def loadFEApath(filename):
+    with open(filename, 'rb') as fi:
+        FEApath = pickle.load(fi)
+    return FEApath
 
 def runFEA(FEApath, inputfile):
     args = [FEApath, inputfile]
@@ -42,7 +65,14 @@ def getFitness(dfmesh):
 
 if __name__ == "__main__":
     
-    FEApath = "C:/Users/Ryan Larson/github/strain-gen-opt/FEA/FEA.exe"
+    # FEApath = "C:/Users/Ryan Larson/github/strain-gen-opt/FEA/FEA.exe"
+    
+    # # Choose FEA path here
+    # initialdirFEA = "C:/Users/Ryan Larson/github/strain-gen-opt/FEA"
+    # FEApath = chooseFEApath(initialdirFEA)
+    
+    # Load previously chosen FEA path here
+    FEApath = loadFEApath('FEApath.pk')
     
     initialdir = str(pathlib.Path(FEApath).parent) + "Examples"
     
