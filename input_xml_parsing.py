@@ -5,7 +5,8 @@ Created on Thu Jun 15 23:20:26 2023
 @author: Ryan Larson
 """
 import xmltodict
-
+from shapely.geometry import Polygon
+import matplotlib.pyplot as plt
 
 
 if __name__ == "__main__":
@@ -38,9 +39,45 @@ if __name__ == "__main__":
     
     # Get relevant information about plates
     plates = fixture_dict["struct"][1]["polyshape"]
-    plate_types = [plate["@identifier"] for plate in plates]
-
-
+    plates_present = [plate["@identifier"] for plate in plates]
+    plate_types = ["Pressure", "I_Plate", "Stripper", "Probe"]
+    
+    plate_polygons = []
+    for platenum,plate in enumerate(plates):
+        # Get the exterior boundary of the plate
+        plate_region = plate["region"]["vertex"]
+        for i,vertex in enumerate(plate_region):
+            plate_region[i] = vertex.split("|")
+        
+        # Get the hole boundaries, if there are any
+        plate_holes = plate["hole"]
+        for i,hole in enumerate(plate_holes):
+            plate_holes[i] = hole["vertex"]
+            for j,vertex in enumerate(plate_holes[i]):
+                plate_holes[i][j] = vertex.split("|")
+                
+        # Create a shapely Polygon from the exterior and the holes
+        plate_poly = Polygon(plate_region)
+        for hole in plate_holes:
+            hole_poly = Polygon(hole)
+            plate_poly = plate_poly.difference(hole_poly)
+        plate_polygons.append(plate_poly)
+        
+        # Plot the plate
+        fig, ax = plt.subplots(dpi=300)
+        ax.axis('equal')
+        
+        # Plot Polygon
+        xe, ye = plate_poly.exterior.xy
+        for inner in plate_poly.interiors:
+            xi, yi = zip(*inner.coords[:])
+            ax.plot(xi, yi, color="blue")
+         
+        ax.plot(xe, ye, color="blue", label=f"{plates_present[platenum]}")
+        plt.legend()
+        plt.show()
+    
+    # NOTE: Need to respond differently depending on which plates are part of the design
 
 
 
