@@ -7,7 +7,43 @@ Created on Thu Jun 15 23:20:26 2023
 import xmltodict
 from shapely.geometry import Polygon
 import matplotlib.pyplot as plt
+import pandas as pd
+import numpy as np
 
+# Use for inputs that are an XML description of a data table. These include
+# the inputs for probes, guide pins, pressure rods on top and bottom, and
+# standoffs (probes_dict, guide_pins_dict, pressure_rods_dict,
+# bottom_pressure_rods_dict, and standoffs_dict).
+def feature_dict_to_dataframe(feature_dict):
+    cols = feature_dict["columns"]["col"]
+    rows = feature_dict["rows"]["row"]
+    new_rows = [elem.split("|") for elem in rows]
+    
+    # Convert elements of new_rows to the appropriate data type before
+    # converting to DataFrame
+    int_indices = [0,1,4,6,8,10,16]
+    float_indices = [2,3,5,13,14]
+    bool_indices = [12]
+    list_indices = [15]
+    nan_indices = [11]    
+    for row in new_rows:
+        for i,elem in enumerate(row):
+            if i in int_indices:
+                row[i] = int(elem)
+            elif i in float_indices:
+                row[i] = float(elem)
+            elif i in bool_indices:
+                if elem == "false":
+                    row[i] = False
+                else:
+                    row[i] = True
+            elif i in list_indices:
+                row[i] = elem.strip('][').split(', ')
+            elif i in nan_indices:
+                row[i] = np.nan
+    
+    df = pd.DataFrame(new_rows, columns=cols)
+    return df
 
 if __name__ == "__main__":
     with open('FEA_Example2.xml', 'r', encoding='utf-8') as file:
@@ -20,6 +56,20 @@ if __name__ == "__main__":
     fixture_dict = FEA_dict["FEA"]["struct"][1]
     
     nsprings = int(fixture_dict["SpringCount"])
+    
+    # Get dicts of features of interest (design variables)
+    probes_dict = fixture_dict["table"][0]
+    guide_pins_dict = fixture_dict["table"][1]
+    pressure_rods_dict = fixture_dict["table"][2]
+    bottom_pressure_rods_dict = fixture_dict["table"][3]
+    standoffs_dict = fixture_dict["table"][4]
+    
+    # Convert the dicts to dataframes
+    probes_df = feature_dict_to_dataframe(probes_dict)
+    guide_pins_df = feature_dict_to_dataframe(guide_pins_dict)
+    pressure_rods_df = feature_dict_to_dataframe(pressure_rods_dict)
+    bottom_pressure_rods_df = feature_dict_to_dataframe(bottom_pressure_rods_dict)
+    standoffs_df = feature_dict_to_dataframe(standoffs_dict)
     
     # Get relevant information about panels
     panels = fixture_dict["struct"][0]["polyshape"]
@@ -79,7 +129,12 @@ if __name__ == "__main__":
     
     # NOTE: Need to respond differently depending on which plates are part of the design
 
-
+    # NOTE: Down the line it would be useful to have several different plotting
+    # functions:
+        # Plot a specific chromosome (individual design)
+        # Plot the initial design
+        # Show all plate designs simultaneously or in a way that they can be compared
+        # 
 
 
 
