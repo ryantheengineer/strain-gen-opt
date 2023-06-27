@@ -67,7 +67,8 @@ def feature_dict_to_dataframe(feature_dict):
                 else:
                     row[i] = True
             elif i in list_indices:
-                row[i] = elem.strip('][').split(', ')
+                row[i] = elem.strip('][').split(',')
+                row[i] = [float(entry) for entry in row[i]]
             elif i in nan_indices:
                 row[i] = np.nan
     
