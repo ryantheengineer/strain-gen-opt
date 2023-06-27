@@ -9,11 +9,16 @@ from shapely.geometry import Polygon
 import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
+import random
 
 # Use for inputs that are an XML description of a data table. These include
 # the inputs for probes, guide pins, pressure rods on top and bottom, and
 # standoffs (probes_dict, guide_pins_dict, pressure_rods_dict,
 # bottom_pressure_rods_dict, and standoffs_dict).
+
+# Note: Eventually this should just return the required information for
+# constructing the design model, but the other values will probably be needed
+# for constructing the proper XML input that the FEA is expecting.
 def feature_dict_to_dataframe(feature_dict):
     cols = feature_dict["columns"]["col"]
     rows = feature_dict["rows"]["row"]
@@ -74,6 +79,38 @@ def feature_dict_to_dataframe(feature_dict):
     
     df = pd.DataFrame(new_rows, columns=cols)
     return df
+
+
+
+
+###############################################################################
+########## FUNCTIONS FOR CONVERTING DESIGN CHROMOSOME INTO XML INPUT ##########
+###############################################################################
+def random_dummy_chromosome(nguide, npresstop, nstandoffs):
+    chromosome = []
+    for i in range(nguide):
+        x = random.uniform(0.0, 10.0)
+        y = random.uniform(0.0, 10.0)
+        d = random.choice([0.075,0.1])
+        chromosome.append(x)
+        chromosome.append(y)
+        chromosome.append(d)
+    for i in range(npresstop):
+        x = random.uniform(0.0, 10.0)
+        y = random.uniform(0.0, 10.0)
+        chromosome.append(x)
+        chromosome.append(y)
+    for i in range(nstandoffs):
+        x = random.uniform(0.0, 10.0)
+        y = random.uniform(0.0, 10.0)
+        chromosome.append(x)
+        chromosome.append(y)
+    return chromosome        
+            
+
+
+
+
 
 if __name__ == "__main__":
     with open('FEA_Example2.xml', 'r', encoding='utf-8') as file:
