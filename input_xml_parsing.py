@@ -18,14 +18,43 @@ def feature_dict_to_dataframe(feature_dict):
     cols = feature_dict["columns"]["col"]
     rows = feature_dict["rows"]["row"]
     new_rows = [elem.split("|") for elem in rows]
+    identifier = feature_dict["@identifier"]
+    
+    if identifier == "Probes":
+        int_indices = [0,1,4,6,8,10,16]
+        float_indices = [2,3,5,13,14]
+        bool_indices = [12]
+        list_indices = [15]
+        nan_indices = [11]
+    elif identifier == "GuidePins":
+        int_indices = [0,1,2,3,5,9,11,12,15,19]
+        float_indices = [6,7,8,10,16]
+        bool_indices = [4,14,18]
+        list_indices = [17]
+        nan_indices = []
+    elif identifier == "PressureRods":
+        int_indices = [0,1,2,3,5,8,9,11,12,15]
+        float_indices = [6,7,10,16]
+        bool_indices = [4,14]
+        list_indices = [17]
+        nan_indices = []
+    elif identifier == "BottomPressureRods":
+        int_indices = []
+        float_indices = []
+        bool_indices = []
+        list_indices = []
+        nan_indices = []
+    elif identifier == "Standoffs":
+        int_indices = [0,1,2,3,5,8,9,11,12,15]
+        float_indices = [6,7,10,16]
+        bool_indices = [4,14]
+        list_indices = [17]
+        nan_indices = []
+    else:
+        raise ValueError("Identifier not recognized")
     
     # Convert elements of new_rows to the appropriate data type before
     # converting to DataFrame
-    int_indices = [0,1,4,6,8,10,16]
-    float_indices = [2,3,5,13,14]
-    bool_indices = [12]
-    list_indices = [15]
-    nan_indices = [11]    
     for row in new_rows:
         for i,elem in enumerate(row):
             if i in int_indices:
@@ -68,7 +97,7 @@ if __name__ == "__main__":
     probes_df = feature_dict_to_dataframe(probes_dict)
     guide_pins_df = feature_dict_to_dataframe(guide_pins_dict)
     pressure_rods_df = feature_dict_to_dataframe(pressure_rods_dict)
-    bottom_pressure_rods_df = feature_dict_to_dataframe(bottom_pressure_rods_dict)
+    # bottom_pressure_rods_df = feature_dict_to_dataframe(bottom_pressure_rods_dict)
     standoffs_df = feature_dict_to_dataframe(standoffs_dict)
     
     # Get relevant information about panels
