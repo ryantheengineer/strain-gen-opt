@@ -10,6 +10,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
 import random
+import xml.etree.ElementTree as ET
 
 # Use for inputs that are an XML description of a data table. These include
 # the inputs for probes, guide pins, pressure rods on top and bottom, and
@@ -113,6 +114,31 @@ def random_dummy_chromosome(nguide, npresstop, nstandoffs):
 
 
 if __name__ == "__main__":
+    # # Parse the XML file
+    # tree = ET.parse('FEA_Example2.xml')
+    # root = tree.getroot()
+    
+    # # Define the XPath expression to select the <vertex> elements
+    # vertex_xpath = ".//vertex"  # Assumes <vertex> elements can occur at any level below the root
+    
+    # # Iterate over the selected <vertex> elements
+    # for vertex in root.iterfind(vertex_xpath):
+    #     # Extract x and y values
+    #     x, y = vertex.text.split('|')
+    #     x = float(x.strip())  # Convert to int if needed
+    #     y = float(y.strip())  # Convert to int if needed
+    
+    #     # Modify x and y values
+    #     x += 10
+    #     y -= 5
+    
+    #     # Update the <vertex> element with modified values
+    #     vertex.text = f'{x}|{y}'
+    
+    # # Save the modified XML file
+    # tree.write('modified_file.xml')
+
+
     with open('FEA_Example2.xml', 'r', encoding='utf-8') as file:
         FEA_xml = file.read()
         
@@ -206,24 +232,22 @@ if __name__ == "__main__":
 
 
 
-# import pandas as pd
-# import xml.etree.ElementTree as ET
+# # import pandas as pd
+# # import xml.etree.ElementTree as ET
 
-# # Load the XML file
-# tree = ET.parse('FEA_Example2.xml')
+# # # Load the XML file
+# # tree = ET.parse('FEA_Example2.xml')
 
-# # Get the root element
-# root = tree.getroot()
+# # # Get the root element
+# # root = tree.getroot()
 
-# # Create a DataFrame
-# df = pd.DataFrame()
+# # # Create a DataFrame
+# # df = pd.DataFrame()
 
-# # Iterate over the child elements of the root element
-# for child in root:
-#     # Add the child element's text to the DataFrame
-#     df[child.tag] = child.text
+# # # Iterate over the child elements of the root element
+# # for child in root:
+# #     # Add the child element's text to the DataFrame
+# #     df[child.tag] = child.text
 
-# # Print the DataFrame
-# print(df)
-
-
+# # # Print the DataFrame
+# # print(df)
