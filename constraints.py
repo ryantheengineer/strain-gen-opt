@@ -12,6 +12,7 @@ FROM THE XML DESIGN INPUT.
 """
 
 from shapely.geometry import Point, Polygon, MultiPolygon
+from shapely.affinity import rotate, translate
 import xmltodict
 import pandas as pd
 import numpy as np
@@ -99,6 +100,62 @@ def get_pBoards(root):
                 region_polys[i] = region_polys[i].difference(hole_poly)
     
     return region_polys, numRegions, numHoles
+
+
+def get_region_shifts(region_polys):
+    polys_copy = region_polys.copy()
+    refpoly = polys_copy.pop(0)
+    angles = [0, 45, 90, 135, 180, 225, 270, 315]
+    
+    xshifts = [0.0]
+    yshifts = [0.0]
+    rotations = [0.0]
+    
+    for poly in polys_copy:
+        for angle in angles:
+            origin = poly.centroid
+            rotpoly = rotate(poly, angle=angle, origin=origin)
+            shifted, xshift, yshift = check_shifted(refpoly, rotpoly)
+            if shifted==True:
+                xshifts.append(xshift)
+                yshifts.append(yshift)
+                rotations.append(angle)
+                break
+            elif shifted==False and angle==angles[-1]:
+                xshifts.append(xshift)
+                yshifts.append(xshift)
+                rotations.append(None)
+    
+    return xshifts, yshifts, rotations
+                
+            
+def check_shifted(refpoly, poly):
+    # Only checks whether poly is identical to refpoly, just translated
+    refcoords = refpoly.exterior.coords
+    coords = poly.exterior.coords
+    xdiffs = []
+    ydiffs = []
+    sensitivity = 0.0001
+    for i in range(len(coords)):
+        xdiff = coords[i][0] - refcoords[i][0]
+        ydiff = coords[i][1] - refcoords[i][1]
+        xdiffs.append(xdiff)
+        ydiffs.append(ydiff)
+    if len(set(xdiffs))==1 and len(set(ydiffs))==1:
+        shifted = True
+        xshift = xdiffs[0]
+        yshift = ydiffs[0]
+    elif np.std(list(set(xdiffs)))<sensitivity and np.std(list(set(ydiffs)))<sensitivity:
+        shifted = True
+        xshift = np.median(xdiffs)
+        yshift = np.median(ydiffs)
+    else:
+        shifted = False
+        xshift = None
+        yshift = None
+        
+    return shifted, xshift, yshift
+    
 
 
 # Utility functions
@@ -271,3 +328,7 @@ if __name__ == "__main__":
     pBoards, numRegions, numHoles = get_pBoards(root)
     plot_poly_list_w_holes(pBoards)
     print(f"Regions:\t{numRegions}\nHoles:\t{numHoles}")
+    
+    xshifts, yshifts, rotations = get_region_shifts(pBoards)
+    df = pd.DataFrame({"xshift":xshifts, "yshift":yshifts, "rotation":rotations})
+    print(df)
