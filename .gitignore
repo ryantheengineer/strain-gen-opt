@@ -1,2 +1,13 @@
 venv/
 *.pyc
+*.xml
+*.png
+*MeshElements.csv
+*MeshNodes.csv
+*FEAReport.csv
+*.log
+*.bat
+*.exe
+*.mat
+*Readme.txt
+*FEA XML Overview.txt
