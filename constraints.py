@@ -41,16 +41,16 @@ def get_XML_tree(initialdir):
     treeroot = tree.getroot()
     return treeroot
 
-########## Obtain relevant Panel info ##########
-# pBoards
-def get_pBoards(root):
+########## Obtain relevant Fixture info ##########
+# Panel, Plates
+def get_fixture_geometry(root, identifier):
     polyshapes = root.findall('.//polyshape')
-    pBoards = None
+    fixture = None
     region_polys = None
     hole_polys = None
     for polyshape in polyshapes:
-        if polyshape.attrib.get("identifier") == "pBoards":
-            pBoards = polyshape
+        if polyshape.attrib.get("identifier") == identifier:
+            fixture = polyshape
             break
     
     def verts_to_poly(polys, elem):
@@ -59,12 +59,12 @@ def get_pBoards(root):
         polys.append(Polygon(vertices))
         
         
-    if pBoards:
-        numRegions = int(pBoards.find('.//numRegions').text)
-        numHoles = int(pBoards.find('.//numHoles').text)
+    if fixture:
+        numRegions = int(fixture.find('.//numRegions').text)
+        numHoles = int(fixture.find('.//numHoles').text)
         if numRegions:
             # Create the Polygons of each region
-            regions = pBoards.findall('.//region')
+            regions = fixture.findall('.//region')
             region_polys = []
             for region in regions:
                 verts_to_poly(region_polys, region)
@@ -73,7 +73,7 @@ def get_pBoards(root):
                 # region_polys.append(Polygon(vertices))
         if numHoles:
             # Create the Polygons of each hole
-            holes = pBoards.findall('.//hole')
+            holes = fixture.findall('.//hole')
             hole_polys = []
             for hole in holes:
                 verts_to_poly(hole_polys, hole)
@@ -103,6 +103,68 @@ def get_pBoards(root):
                 region_polys[i] = region_polys[i].difference(hole_poly)
     
     return region_polys, numRegions, numHoles
+
+# # pBoards
+# def get_pBoards(root):
+#     polyshapes = root.findall('.//polyshape')
+#     pBoards = None
+#     region_polys = None
+#     hole_polys = None
+#     for polyshape in polyshapes:
+#         if polyshape.attrib.get("identifier") == "pBoards":
+#             pBoards = polyshape
+#             break
+    
+#     def verts_to_poly(polys, elem):
+#         vertices_elem = elem.findall('.//vertex')
+#         vertices = [vertex.text.split("|") for vertex in vertices_elem]
+#         polys.append(Polygon(vertices))
+        
+        
+#     if pBoards:
+#         numRegions = int(pBoards.find('.//numRegions').text)
+#         numHoles = int(pBoards.find('.//numHoles').text)
+#         if numRegions:
+#             # Create the Polygons of each region
+#             regions = pBoards.findall('.//region')
+#             region_polys = []
+#             for region in regions:
+#                 verts_to_poly(region_polys, region)
+#                 # vertices_elem = region.findall('.//vertex')
+#                 # vertices = [vertex.text.split("|") for vertex in vertices_elem]
+#                 # region_polys.append(Polygon(vertices))
+#         if numHoles:
+#             # Create the Polygons of each hole
+#             holes = pBoards.findall('.//hole')
+#             hole_polys = []
+#             for hole in holes:
+#                 verts_to_poly(hole_polys, hole)
+#                 # vertices_elem = hole.findall('.//vertex')
+#                 # vertices = [vertex.text.split("|") for vertex in vertices_elem]
+#                 # hole_polys.append(Polygon(vertices))
+#     else:
+#         region_polys = None
+#         numRegions = None
+#         numHoles = None
+        
+#     # If there are holes, determine which region they belong to and subtract
+#     # them to make a list of complete polygons
+#     # NOTE: This assumes that all of the polygons produced by get_pBoards are
+#     # unique and will not overlap each other.
+#     if numHoles:
+#         holes_grouped = [[] for poly in region_polys]
+#         for hole_poly in hole_polys:
+#             for i,region_poly in enumerate(region_polys):
+#                 if region_poly.contains(hole_poly):
+#                     holes_grouped[i].append(hole_poly)
+#                     continue
+                
+#         # Subtract the holes from their regions
+#         for i in range(len(region_polys)):
+#             for hole_poly in holes_grouped[i]:
+#                 region_polys[i] = region_polys[i].difference(hole_poly)
+    
+#     return region_polys, numRegions, numHoles
 
 
 def get_region_shifts(region_polys):
@@ -162,15 +224,20 @@ def check_shifted(refpoly, poly):
 
 
 # Utility functions
-def plot_poly_list_w_holes(poly_list):
-    fig, ax = plt.subplots(figsize=(10,8),dpi=300)
-    ax.set_aspect('equal')
+def plot_poly_list_w_holes(poly_list, fig, ax, color, linestyle, label):
+    # fig, ax = plt.subplots(figsize=(10,8),dpi=300)
+    # ax.set_aspect('equal')
+    first = True
     for poly in poly_list:
         xe, ye = poly.exterior.xy
-        plt.plot(xe, ye, color="blue")
+        if first == True:
+            ax.plot(xe, ye, color=color, label=label, linestyle=linestyle)
+            first = False
+        else:
+            ax.plot(xe, ye, color=color, linestyle=linestyle)  
         for inner in poly.interiors:
             xi, yi = zip(*inner.coords[:])
-            plt.plot(xi, yi, color="blue")
+            ax.plot(xi, yi, color=color, linestyle=linestyle)
 
 
 def get_region_list_centroids(region_polys):
@@ -202,10 +269,66 @@ if __name__ == "__main__":
     initialdir = str(pathlib.Path(FEApath).parent) + "Examples"
     # pBoards_regions_df, pBoards_holes_df = parse_input_xml(initialdir)
     root = get_XML_tree(initialdir)
-    pBoards, numRegions, numHoles = get_pBoards(root)
-    plot_poly_list_w_holes(pBoards)
-    print(f"Regions:\t{numRegions}\nHoles:\t{numHoles}")
+    
+    # Panel
+    pBoards, _, _ = get_fixture_geometry(root, "pBoards")
+    pOutline, _, _ = get_fixture_geometry(root, "pOutline")
+    pShape, _, _ = get_fixture_geometry(root, "pShape")
+    pTopComponents, _, _ = get_fixture_geometry(root, "pTopComponents")
+    pBottomComponents, _, _ = get_fixture_geometry(root, "pBottomComponents")
+    fig1, ax1 = plt.subplots(figsize=(10,8),dpi=300)
+    ax1.set_aspect('equal')
+    labels = []
+    line = "-"
+    if pBoards:
+        plot_poly_list_w_holes(pBoards, fig1, ax1, "blue", line, "pBoards")
+    if pOutline:
+        plot_poly_list_w_holes(pOutline, fig1, ax1, "green", line, "pOutline")
+    if pShape:
+        plot_poly_list_w_holes(pShape, fig1, ax1, "black", line, "pShape")
+    if pTopComponents:
+        plot_poly_list_w_holes(pTopComponents, fig1, ax1, "purple", line, "pTopComponents")
+    if pBottomComponents:
+        plot_poly_list_w_holes(pBottomComponents, fig1, ax1, "orange", line, "pBottomComponents")
+    ax1.legend()
+    
+    # Plates
+    Pressure, _, _ = get_fixture_geometry(root, "Pressure")
+    I_Plate, _, _ = get_fixture_geometry(root, "I_Plate")
+    Stripper, _, _ = get_fixture_geometry(root, "Stripper")
+    Probe, _, _ = get_fixture_geometry(root, "Probe")
+    Countersink, _, _ = get_fixture_geometry(root, "Countersink")
+    # fig2, ax2 = plt.subplots(figsize=(10,8),dpi=300)
+    # ax2.set_aspect('equal')
+    labels = []
+    line = ":"
+    if Pressure:
+        plot_poly_list_w_holes(Pressure, fig1, ax1, "blue", line, "Pressure")
+    if I_Plate:
+        plot_poly_list_w_holes(I_Plate, fig1, ax1, "green", line, "I_Plate")
+    if Stripper:
+        plot_poly_list_w_holes(Stripper, fig1, ax1, "black", line, "Stripper")
+    if Probe:
+        plot_poly_list_w_holes(Probe, fig1, ax1, "purple", line, "Probe")
+    if Countersink:
+        plot_poly_list_w_holes(Countersink, fig1, ax1, "orange", line, "Countersink")
+    ax1.legend()
+    # if Pressure:
+    #     plot_poly_list_w_holes(Pressure, fig2, ax2, "blue", line, "Pressure")
+    # if I_Plate:
+    #     plot_poly_list_w_holes(I_Plate, fig2, ax2, "green", line, "I_Plate")
+    # if Stripper:
+    #     plot_poly_list_w_holes(Stripper, fig2, ax2, "black", line, "Stripper")
+    # if Probe:
+    #     plot_poly_list_w_holes(Probe, fig2, ax2, "purple", line, "Probe")
+    # if Countersink:
+    #     plot_poly_list_w_holes(Countersink, fig2, ax2, "orange", line, "Countersink")
+    # ax2.legend()
+    
+    # plot_poly_list_w_holes(pBoards)
+    # print(f"Regions:\t{numRegions}\nHoles:\t{numHoles}")
     
     xshifts, yshifts, rotations = get_region_shifts(pBoards)
+    # xshifts, yshifts, rotations = get_region_shifts(pBoards)
     df = pd.DataFrame({"xshift":xshifts, "yshift":yshifts, "rotation":rotations})
     print(df)
