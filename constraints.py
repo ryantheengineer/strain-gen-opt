@@ -13,6 +13,8 @@ FROM THE XML DESIGN INPUT.
 
 from shapely.geometry import Point, Polygon, MultiPolygon
 from shapely.affinity import rotate, translate
+from shapely import buffer
+from shapely.ops import unary_union
 import xmltodict
 import pandas as pd
 import numpy as np
@@ -170,15 +172,30 @@ def plot_poly_list_w_holes(poly_list, fig, ax, color, linestyle, label):
     # ax.set_aspect('equal')
     first = True
     for poly in poly_list:
-        xe, ye = poly.exterior.xy
-        if first == True:
-            ax.plot(xe, ye, color=color, label=label, linestyle=linestyle, linewidth=0.5)
-            first = False
+        # Check if poly is a Polygon or MultiPolygon
+        if poly.geom_type == "Polygon":
+            xe, ye = poly.exterior.xy
+            if first == True:
+                ax.plot(xe, ye, color=color, label=label, linestyle=linestyle, linewidth=0.5)
+                first = False
+            else:
+                ax.plot(xe, ye, color=color, linestyle=linestyle, linewidth=0.5)
+            for inner in poly.interiors:
+                xi, yi = zip(*inner.coords[:])
+                ax.plot(xi, yi, color=color, linestyle=linestyle, linewidth=0.5)
+        elif poly.geom_type == "MultiPolygon":
+            for geom in poly.geoms:
+                xe, ye = geom.exterior.xy
+                if first == True:
+                    ax.plot(xe, ye, color=color, label=label, linestyle=linestyle, linewidth=0.5)
+                    first = False
+                else:
+                    ax.plot(xe, ye, color=color, linestyle=linestyle, linewidth=0.5)
+                for inner in geom.interiors:
+                    xi, yi = zip(*inner.coords[:])
+                    ax.plot(xi, yi, color=color, linestyle=linestyle, linewidth=0.5)            
         else:
-            ax.plot(xe, ye, color=color, linestyle=linestyle, linewidth=0.5)
-        for inner in poly.interiors:
-            xi, yi = zip(*inner.coords[:])
-            ax.plot(xi, yi, color=color, linestyle=linestyle, linewidth=0.5)
+            raise IOError("Shape is not a polygon")
             
 def plot_probes_guidepins(df, fig, ax, linestyle, identifier):
     first = True
@@ -287,7 +304,30 @@ def interpret_type_description(type_str, elem):
             return True
     
 
+def place_circle(x,y,radius):
+    circle = Point(x, y).buffer(radius)
+    return circle
 
+def random_perturb(poly, maxmag):
+    while True:
+        xp = random.uniform(-maxmag, maxmag)
+        yp = random.uniform(-maxmag, maxmag)
+        magnitude = np.sqrt(xp**2 + yp**2)
+        if magnitude > maxmag:
+            continue
+        else:
+            break
+    
+    # Adjust polygon by perturbation
+    xe, ye = poly.exterior.xy
+    xe = list(xe)
+    ye = list(ye)
+    xe_perturb = [x+xp for x in xe]
+    ye_perturb = [y+yp for y in ye]
+    xpyp = zip(xe_perturb, ye_perturb)
+    xpyp = tuple(xpyp)
+    poly_perturb = Polygon(xpyp)
+    return poly_perturb
 
 
 if __name__ == "__main__":
@@ -333,72 +373,142 @@ if __name__ == "__main__":
     df_PressureRods = get_point_geometry(root, "PressureRods")
     df_Standoffs = get_point_geometry(root, "Standoffs")
     
-    # Top Plate/Pressure Plate (doesn't hold pressure rods if I_plate exists)
-    if I_Plate:
-        fig1, ax1 = plt.subplots(figsize=(10,8),dpi=500)
-        line="-"
-        plot_poly_list_w_holes(I_Plate, fig1, ax1, "blue", line, "I_Plate")
-        plot_poly_list_w_holes(Pressure, fig1, ax1, "red", line, "Pressure")
-        if pBoards:
-            plot_poly_list_w_holes(pBoards, fig1, ax1, "black", line, "pBoards")
-        if pComponentsTop:
-            plot_poly_list_w_holes(pComponentsTop, fig1, ax1, "purple", line, "pComponentsTop")
-        if df_PressureRods is not None:
-            plot_pressurerods_standoffs(df_PressureRods, fig1, ax1, line, "PressureRods")
-        ax1.set_title("Pressure and Intermediate Plates")
-        ax1.legend()
-    else:
-        print("\nExample has no intermediate plate\n")
-        fig1, ax1 = plt.subplots(figsize=(10,8),dpi=500)
-        line="-"
-        plot_poly_list_w_holes(Pressure, fig1, ax1, "blue", line, "Pressure")
-        if pBoards:
-            plot_poly_list_w_holes(pBoards, fig1, ax1, "black", line, "pBoards")
-        if pComponentsTop:
-            plot_poly_list_w_holes(pComponentsTop, fig1, ax1, "purple", line, "pComponentsTop")
-        if df_PressureRods is not None:
-            plot_pressurerods_standoffs(df_PressureRods, fig1, ax1, line, "PressureRods")
-        ax1.set_title("Pressure Plate")
-        ax1.legend()
+    # #########################################################################
+    # ############# Plot Plates and Features ##############################
+    # #########################################################################
+    # # Top Plate/Pressure Plate (doesn't hold pressure rods if I_plate exists)
+    # if I_Plate:
+    #     fig1, ax1 = plt.subplots(figsize=(10,8),dpi=500)
+    #     line="-"
+    #     plot_poly_list_w_holes(I_Plate, fig1, ax1, "blue", line, "I_Plate")
+    #     plot_poly_list_w_holes(Pressure, fig1, ax1, "red", line, "Pressure")
+    #     if pBoards:
+    #         plot_poly_list_w_holes(pBoards, fig1, ax1, "black", line, "pBoards")
+    #     if pComponentsTop:
+    #         plot_poly_list_w_holes(pComponentsTop, fig1, ax1, "purple", line, "pComponentsTop")
+    #     if df_PressureRods is not None:
+    #         plot_pressurerods_standoffs(df_PressureRods, fig1, ax1, line, "PressureRods")
+    #     ax1.set_title("Pressure and Intermediate Plates")
+    #     ax1.legend()
+    # else:
+    #     print("\nExample has no intermediate plate\n")
+    #     fig1, ax1 = plt.subplots(figsize=(10,8),dpi=500)
+    #     line="-"
+    #     plot_poly_list_w_holes(Pressure, fig1, ax1, "blue", line, "Pressure")
+    #     if pBoards:
+    #         plot_poly_list_w_holes(pBoards, fig1, ax1, "black", line, "pBoards")
+    #     if pComponentsTop:
+    #         plot_poly_list_w_holes(pComponentsTop, fig1, ax1, "purple", line, "pComponentsTop")
+    #     if df_PressureRods is not None:
+    #         plot_pressurerods_standoffs(df_PressureRods, fig1, ax1, line, "PressureRods")
+    #     ax1.set_title("Pressure Plate")
+    #     ax1.legend()
         
-    # Probe Protector Plate (Stripper Plate)
-    if Stripper:
-        fig2, ax2 = plt.subplots(figsize=(10,8),dpi=500)
-        line="-"
-        plot_poly_list_w_holes(Stripper, fig2, ax2, "blue", line, "Stripper")
-        plot_poly_list_w_holes(Probe, fig2, ax2, "red", line, "Probe")
-        if pBoards:
-            plot_poly_list_w_holes(pBoards, fig2, ax2, "black", line, "pBoards")
-        if pComponentsBot:
-            plot_poly_list_w_holes(pComponentsBot, fig2, ax2, "purple", line, "pComponentsBot")
-        if df_Probes is not None:
-            plot_probes_guidepins(df_Probes, fig2, ax2, line, "Probes")
-        if df_GuidePins is not None:
-            plot_probes_guidepins(df_GuidePins, fig2, ax2, line, "GuidePins")
-        if df_Standoffs is not None:
-            plot_pressurerods_standoffs(df_Standoffs, fig2, ax2, line, "Standoffs")
-        ax2.set_title("Probe and Probe Protector (Stripper)Plates")
-        ax2.legend()
-    else:
-        print("\nExample has no probe protector plate (stripper plate)\n")
-        fig2, ax2 = plt.subplots(figsize=(10,8),dpi=500)
-        line="-"
-        plot_poly_list_w_holes(Probe, fig2, ax2, "red", line, "Probe")
-        if pBoards:
-            plot_poly_list_w_holes(pBoards, fig2, ax2, "black", line, "pBoards")
-        if pComponentsBot:
-            plot_poly_list_w_holes(pComponentsBot, fig2, ax2, "purple", line, "pComponentsBot")
-        if df_Probes is not None:
-            plot_probes_guidepins(df_Probes, fig2, ax2, line, "Probes")
-        if df_GuidePins is not None:
-            plot_probes_guidepins(df_GuidePins, fig2, ax2, line, "GuidePins")
-        if df_Standoffs is not None:
-            plot_pressurerods_standoffs(df_Standoffs, fig2, ax2, line, "Standoffs")
-        ax2.set_title("Probe and Probe Protector (Stripper)Plates")
-        ax2.legend()
+    # # Probe Protector Plate (Stripper Plate)
+    # if Stripper:
+    #     fig2, ax2 = plt.subplots(figsize=(10,8),dpi=500)
+    #     line="-"
+    #     plot_poly_list_w_holes(Stripper, fig2, ax2, "blue", line, "Stripper")
+    #     plot_poly_list_w_holes(Probe, fig2, ax2, "red", line, "Probe")
+    #     if pBoards:
+    #         plot_poly_list_w_holes(pBoards, fig2, ax2, "black", line, "pBoards")
+    #     if pComponentsBot:
+    #         plot_poly_list_w_holes(pComponentsBot, fig2, ax2, "purple", line, "pComponentsBot")
+    #     if df_Probes is not None:
+    #         plot_probes_guidepins(df_Probes, fig2, ax2, line, "Probes")
+    #     if df_GuidePins is not None:
+    #         plot_probes_guidepins(df_GuidePins, fig2, ax2, line, "GuidePins")
+    #     if df_Standoffs is not None:
+    #         plot_pressurerods_standoffs(df_Standoffs, fig2, ax2, line, "Standoffs")
+    #     ax2.set_title("Probe and Probe Protector (Stripper)Plates")
+    #     ax2.legend()
+    # else:
+    #     print("\nExample has no probe protector plate (stripper plate)\n")
+    #     fig2, ax2 = plt.subplots(figsize=(10,8),dpi=500)
+    #     line="-"
+    #     plot_poly_list_w_holes(Probe, fig2, ax2, "red", line, "Probe")
+    #     if pBoards:
+    #         plot_poly_list_w_holes(pBoards, fig2, ax2, "black", line, "pBoards")
+    #     if pComponentsBot:
+    #         plot_poly_list_w_holes(pComponentsBot, fig2, ax2, "purple", line, "pComponentsBot")
+    #     if df_Probes is not None:
+    #         plot_probes_guidepins(df_Probes, fig2, ax2, line, "Probes")
+    #     if df_GuidePins is not None:
+    #         plot_probes_guidepins(df_GuidePins, fig2, ax2, line, "GuidePins")
+    #     if df_Standoffs is not None:
+    #         plot_pressurerods_standoffs(df_Standoffs, fig2, ax2, line, "Standoffs")
+    #     ax2.set_title("Probe and Probe Protector (Stripper)Plates")
+    #     ax2.legend()
+        
+    # # plt.show()
+    
+    ### Randomly place probe circles on top side of board ###
+    # Add buffers around components and edge of boards
+    buffer_dist = 0.0625
+    pBoards_dilated = []
+    for board in pBoards:
+        UUT_poly_ext = Polygon(board.exterior.coords)
+        UUT_poly_dilated_ext = buffer(UUT_poly_ext,-buffer_dist)
+        pBoards_dilated.append(UUT_poly_dilated_ext)
+    
+    topcomponents_dilated = []
+    for inner in pComponentsTop:
+        topcomponents_dilated.append(buffer(inner, buffer_dist))
+    
+    topcomponents_dilated = unary_union(topcomponents_dilated)
+    topcomponents_dilated = list(topcomponents_dilated.geoms)
+    
+    # Subtract dilated interiors from
+    for i,board in enumerate(pBoards_dilated):
+        for inner in topcomponents_dilated:
+            if inner.intersects(board):
+                pBoards_dilated[i] = pBoards_dilated[i].difference(inner)
+                
+    # Plot the original board with components and then the dilated version
+    fig3, ax3 = plt.subplots(figsize=(10,8),dpi=500)
+    line="-"
+    plot_poly_list_w_holes(pBoards, fig3, ax3, "black", line, "pBoards")
+    if pComponentsTop:
+        plot_poly_list_w_holes(pComponentsTop, fig3, ax3, "purple", line, "pComponentsTop")
+    plot_poly_list_w_holes(pBoards_dilated, fig3, ax3, "blue", line, "pBoards_dilated")
+    
+    # Place circles on grid within UUT
+    valid_circles = []
+    for board in pBoards_dilated:
+        xmin, ymin, xmax, ymax = board.bounds
+        circles = []
+        radius = 0.0625/2
+        resolution = radius*2 + 0.05
+        perturb = 0.05/2
+        for x in np.arange(xmin, xmax, resolution):
+            for y in np.arange(ymin, ymax, resolution):
+                c = place_circle(x, y, radius)
+                circles.append(c)
+        
+        # Randomly perturb each circle
+        for i,circle in enumerate(circles):
+            circles[i] = random_perturb(circle, perturb)
+            # NOTE: Before accepting randomly perturbed circle, make sure it is 
+            # within spec. Force rods can't be too close together.
+        
+        # Validate that each circle falls inside shape
+        valid_circles.extend(filter(board.contains, circles)) # FIX: This is an old version that doesn't check for multipolygons. Some circle overlaps exist
+        
+        # Plot circles
+        first = True
+        for circle in valid_circles:
+            xe, ye = circle.exterior.xy
+            if first==True:
+                ax3.plot(xe, ye, color="red", label="random pressure rods")
+                first = False
+            else:
+                ax3.plot(xe, ye, color="red")
+                
+    
+    ax3.set_title("Dilated boundaries around board and components")
+    ax3.legend()
         
     plt.show()
-    
     
     # labels = []
     # line = ":"
@@ -430,7 +540,7 @@ if __name__ == "__main__":
     # print(f"Regions:\t{numRegions}\nHoles:\t{numHoles}")
     
     
-    # 
+    
     
     
     dfshifts = get_region_shifts(pBoards)
