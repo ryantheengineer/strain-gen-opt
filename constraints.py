@@ -329,6 +329,46 @@ def random_perturb(poly, maxmag):
     poly_perturb = Polygon(xpyp)
     return poly_perturb
 
+def random_valid_perturb(poly, outer_poly, maxmag):
+    count = 0
+    lim = 100
+    if outer_poly.area > poly.area:
+        while count < lim:
+            # while True:
+            #     xp = random.uniform(-maxmag, maxmag)
+            #     yp = random.uniform(-maxmag, maxmag)
+            #     magnitude = np.sqrt(xp**2 + yp**2)
+            #     if magnitude > maxmag:
+            #         continue
+            #     else:
+            #         break
+                
+            # Approach: Choose a random magnitude, then choose the first
+            # component randomly that would give that magnitude, then solve
+            # for the remaining component
+            mag = random.uniform(0, maxmag)
+            xp = random.uniform(-mag, mag)
+            yp = np.sqrt(mag**2 - xp**2)
+            yp = random.choice([yp, -yp])
+                
+            # Adjust polygon by perturbation
+            xe, ye = poly.exterior.xy
+            xe = list(xe)
+            ye = list(ye)
+            xe_perturb = [x+xp for x in xe]
+            ye_perturb = [y+yp for y in ye]
+            xpyp = zip(xe_perturb, ye_perturb)
+            xpyp = tuple(xpyp)
+            poly_perturb = Polygon(xpyp)
+            
+            if outer_poly.contains(poly_perturb):
+                break
+            else:
+                count += 1
+        return poly_perturb
+    else:
+        return poly
+
 
 if __name__ == "__main__":
     # Load previously chosen FEA path here
@@ -444,7 +484,7 @@ if __name__ == "__main__":
     
     ### Randomly place probe circles on top side of board ###
     # Add buffers around components and edge of boards
-    buffer_dist = 0.0625
+    buffer_dist = 0.025
     pBoards_dilated = []
     for board in pBoards:
         UUT_poly_ext = Polygon(board.exterior.coords)
@@ -456,9 +496,10 @@ if __name__ == "__main__":
         topcomponents_dilated.append(buffer(inner, buffer_dist))
     
     topcomponents_dilated = unary_union(topcomponents_dilated)
-    topcomponents_dilated = list(topcomponents_dilated.geoms)
+    if topcomponents_dilated.geom_type == "MultiPolygon":
+        topcomponents_dilated = list(topcomponents_dilated.geoms)
     
-    # Subtract dilated interiors from
+    # Subtract dilated interiors from the exterior polygon or multipolygon
     for i,board in enumerate(pBoards_dilated):
         for inner in topcomponents_dilated:
             if inner.intersects(board):
@@ -466,6 +507,7 @@ if __name__ == "__main__":
                 
     # Plot the original board with components and then the dilated version
     fig3, ax3 = plt.subplots(figsize=(10,8),dpi=500)
+    ax3.set_aspect('equal')
     line="-"
     plot_poly_list_w_holes(pBoards, fig3, ax3, "black", line, "pBoards")
     if pComponentsTop:
@@ -474,7 +516,16 @@ if __name__ == "__main__":
     
     # Place circles on grid within UUT
     valid_circles = []
+    first = True
     for board in pBoards_dilated:
+        # FIXME: Here this should iterate on the polygons that define the 
+        # available space, not the outline of the PCBs. Each PCB could have
+        # several possible areas that could have a new grid of circles in it.
+        # Additionally, every area that could have a circle, should have a
+        # circle to make sure the optimization fully explores the design space.
+        # The grid resolution concept may need to be improved on to make this
+        # happen.
+        
         xmin, ymin, xmax, ymax = board.bounds
         circles = []
         radius = 0.0625/2
@@ -487,7 +538,8 @@ if __name__ == "__main__":
         
         # Randomly perturb each circle
         for i,circle in enumerate(circles):
-            circles[i] = random_perturb(circle, perturb)
+            circles[i] = random_valid_perturb(circle, board, perturb)
+            # circles[i] = random_perturb(circle, perturb)
             # NOTE: Before accepting randomly perturbed circle, make sure it is 
             # within spec. Force rods can't be too close together.
         
@@ -495,7 +547,6 @@ if __name__ == "__main__":
         valid_circles.extend(filter(board.contains, circles)) # FIX: This is an old version that doesn't check for multipolygons. Some circle overlaps exist
         
         # Plot circles
-        first = True
         for circle in valid_circles:
             xe, ye = circle.exterior.xy
             if first==True:
