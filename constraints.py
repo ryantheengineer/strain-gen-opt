@@ -165,6 +165,73 @@ def check_shifted(refpoly, poly):
     return shifted, xshift, yshift
     
 
+# FEA functions
+def runFEA_valid_circles(valid_circles, df_PressureRods, root):
+    df = df_PressureRods.loc[0,:]
+    basic_vals = {}
+    for col in df.index:
+        basic_vals[col] = df[col]
+    new_vals = [[] for col in df.index]
+    
+    xnew = []
+    ynew = []
+    for valid_circle in valid_circles:
+        xnew.append(valid_circle.centroid.x)
+        ynew.append(valid_circle.centroid.y)
+    
+    newdata = {}
+    for col in df.index:
+        if col == "x":
+            newdata[col] = xnew
+        elif col == "y":
+            newdata[col] = ynew
+        else:
+            newdata[col] = [basic_vals[col] for valid_circle in valid_circles]
+            
+    df_PressureRods_update = pd.DataFrame(newdata)
+    
+    # Get the rows of df_PressureRods_update as a list of strings
+    x = df_PressureRods_update.to_string(header=False,
+                  index=False,
+                  index_names=False).split('\n')
+    vals = ['|'.join(ele.split()) for ele in x] # FIXME: The splitting here is too generous and adds | separators where they shouldn't be. Also, booleans should be lowercase and most numbers should be integers.
+    
+    # Delete the XML rows that need to be replaced
+    rows = root.find('.//table[@identifier="PressureRods"].//rows')
+    del rows[:]
+    
+    rowlist = [ET.SubElement(rows,'row') for val in vals]
+
+    for i,val in enumerate(vals):
+        rowlist[i].text = val
+        
+    # for val in vals:
+    #     row = ET.SubElement(rows, 'row')
+    #     row.text = val
+    #     # # val_elem = ET.SubElement(rows, 'row')
+    #     # val_elem = ET.Element('row')
+    #     # val_elem.text = val
+    #     # rows.append(val_elem)
+    
+    # tables = root.findall('.//table')
+    # for table in tables:
+    #     if table.attrib.get("identifier") == "PressureRods":            
+    #         for row in table.findall('.//row'):
+    #             table.remove(row)
+            
+    #         for val in vals:
+    #             table.insert(val)
+    
+    # Write the new element tree
+    tree = ET.ElementTree(root)
+    ET.indent(tree, '  ')
+    tree.write("FEA_random_pressure_rods.xml")
+    # with open('FEA_random_pressure_rods.xml', 'w') as f:
+    #     root.write(f, encoding='unicode')
+    
+    FEApath = runFEA.loadFEApath('FEApath.pk')
+    runFEA.runFEA(FEApath, 'FEA_random_pressure_rods.xml')
+    
 
 # Utility functions
 def plot_poly_list_w_holes(poly_list, fig, ax, color, linestyle, label):
@@ -531,8 +598,8 @@ if __name__ == "__main__":
         radius = 0.0625/2
         resolution = radius*2 + 0.05
         perturb = 0.05/2
-        for x in np.arange(xmin, xmax, resolution):
-            for y in np.arange(ymin, ymax, resolution):
+        for x in np.arange(xmin+radius, xmax, resolution):
+            for y in np.arange(ymin+radius, ymax, resolution):
                 c = place_circle(x, y, radius)
                 circles.append(c)
         
@@ -595,4 +662,8 @@ if __name__ == "__main__":
     
     
     dfshifts = get_region_shifts(pBoards)
+    
+    
+    # Run FEA with valid_circles defining the pressure rod points
+    runFEA_valid_circles(valid_circles, df_PressureRods, root)
     
