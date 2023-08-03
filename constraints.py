@@ -26,6 +26,7 @@ import pickle
 import pathlib
 import matplotlib.pyplot as plt
 import runFEA
+import os
 
 # Get the root of the XML tree that will be used for all other input parsing
 def get_XML_tree(initialdir):
@@ -42,7 +43,7 @@ def get_XML_tree(initialdir):
     # Parse the XML file
     tree = ET.parse(inputfile)
     treeroot = tree.getroot()
-    return treeroot
+    return treeroot, inputfile
 
 ########## Obtain relevant Fixture info ##########
 # Panel, Plates
@@ -166,12 +167,29 @@ def check_shifted(refpoly, poly):
     
 
 # FEA functions
-def runFEA_valid_circles(valid_circles, df_PressureRods, root):
+def runFEA_valid_circles(valid_circles, df_PressureRods, root, inputfile):
+    # Ensure correct type is used for integer columns
+    df_PressureRods['unimplemented1'] = df_PressureRods['unimplemented1'].astype(int)
+    df_PressureRods['unimplemented2'] = df_PressureRods['unimplemented2'].astype(int)
+    df_PressureRods['unimplemented3'] = df_PressureRods['unimplemented3'].astype(int)
+    df_PressureRods['unimplemented4'] = df_PressureRods['unimplemented4'].astype(int)
+    df_PressureRods['unimplemented5'] = df_PressureRods['unimplemented5'].astype(str)
+    df_PressureRods['unimplemented5'] = df_PressureRods['unimplemented5'].apply(str.lower)
+    df_PressureRods['unimplemented6'] = df_PressureRods['unimplemented6'].astype(int)
+    df_PressureRods['unimplemented7'] = df_PressureRods['unimplemented7'].astype(int)
+    df_PressureRods['unimplemented8'] = df_PressureRods['unimplemented8'].astype(int)
+    df_PressureRods['unimplemented10'] = df_PressureRods['unimplemented10'].astype(int)
+    df_PressureRods['unimplemented11'] = df_PressureRods['unimplemented11'].astype(int)
+    df_PressureRods['type'] = df_PressureRods['type'].astype(str)
+    df_PressureRods['unimplemented12'] = df_PressureRods['unimplemented12'].astype(str)
+    df_PressureRods['unimplemented12'] = df_PressureRods['unimplemented12'].apply(str.lower)
+    df_PressureRods['unimplemented13'] = df_PressureRods['unimplemented13'].astype(int)
+    
     df = df_PressureRods.loc[0,:]
     basic_vals = {}
     for col in df.index:
         basic_vals[col] = df[col]
-    new_vals = [[] for col in df.index]
+    # new_vals = [[] for col in df.index]
     
     xnew = []
     ynew = []
@@ -191,10 +209,28 @@ def runFEA_valid_circles(valid_circles, df_PressureRods, root):
     df_PressureRods_update = pd.DataFrame(newdata)
     
     # Get the rows of df_PressureRods_update as a list of strings
-    x = df_PressureRods_update.to_string(header=False,
+    vals = df_PressureRods_update.to_string(header=False,
                   index=False,
                   index_names=False).split('\n')
-    vals = ['|'.join(ele.split()) for ele in x] # FIXME: The splitting here is too generous and adds | separators where they shouldn't be. Also, booleans should be lowercase and most numbers should be integers.
+    for j,row in enumerate(vals):
+        splitrow = row.split()
+        newrow = []
+        for i,ele in enumerate(splitrow):
+            if i==13:
+                newrow.append(' '.join(splitrow[13:15]))
+            elif i==14:
+                continue
+            elif i==18:
+                newrow.append(''.join(splitrow[18:]))
+            elif i==19:
+                continue
+            elif i==20:
+                continue
+            else:
+                newrow.append(ele)
+        newrow = '|'.join(newrow)
+        vals[j] = newrow
+    # vals = ['|'.join(ele.split()) for ele in x
     
     # Delete the XML rows that need to be replaced
     rows = root.find('.//table[@identifier="PressureRods"].//rows')
@@ -204,6 +240,8 @@ def runFEA_valid_circles(valid_circles, df_PressureRods, root):
 
     for i,val in enumerate(vals):
         rowlist[i].text = val
+    # for i,val in enumerate(vals):
+    #     rowlist[i].text = val
         
     # for val in vals:
     #     row = ET.SubElement(rows, 'row')
@@ -225,12 +263,26 @@ def runFEA_valid_circles(valid_circles, df_PressureRods, root):
     # Write the new element tree
     tree = ET.ElementTree(root)
     ET.indent(tree, '  ')
-    tree.write("FEA_random_pressure_rods.xml")
+    # new_inputfile = 
+    # path = pathlib.Path("/path/to/file.txt")
+    new_filename = "FEA_random_pressure_rods.xml"
+    path, filename = os.path.split(inputfile)
+    new_path = path + "/" + new_filename
+    
+    # new_path = os.inputfile.join(os.inputfile.dirname(inputfile), new_filename)
+    # inputfile.rename(new_filename)
+    tree.write(new_path)
     # with open('FEA_random_pressure_rods.xml', 'w') as f:
     #     root.write(f, encoding='unicode')
     
     FEApath = runFEA.loadFEApath('FEApath.pk')
-    runFEA.runFEA(FEApath, 'FEA_random_pressure_rods.xml')
+    runFEA.runFEA(FEApath, new_path)
+    
+    dfmesh = runFEA.resultsToDataframe(inputfile)
+    
+    strain_xx, strain_yy, strain_xy, principalStrain_min, principalStrain_max = runFEA.getFitness(dfmesh)
+    
+    return strain_xx, strain_yy, strain_xy, principalStrain_min, principalStrain_max
     
 
 # Utility functions
@@ -437,6 +489,7 @@ def random_valid_perturb(poly, outer_poly, maxmag):
         return poly
 
 
+# %% Load data and read in the XML definition
 if __name__ == "__main__":
     # Load previously chosen FEA path here
     filename = 'FEApath.pk'
@@ -445,7 +498,7 @@ if __name__ == "__main__":
     
     initialdir = str(pathlib.Path(FEApath).parent) + "Examples"
     # pBoards_regions_df, pBoards_holes_df = parse_input_xml(initialdir)
-    root = get_XML_tree(initialdir)
+    root, inputfile = get_XML_tree(initialdir)
     
     # Panel
     pBoards, _, _ = get_fixture_geometry(root, "pBoards")
@@ -549,7 +602,8 @@ if __name__ == "__main__":
         
     # # plt.show()
     
-    ### Randomly place probe circles on top side of board ###
+    # %% Place pressure rods
+    ### Randomly place pressure rod circles on top side of board ###
     # Add buffers around components and edge of boards
     buffer_dist = 0.025
     pBoards_dilated = []
@@ -596,7 +650,7 @@ if __name__ == "__main__":
         xmin, ymin, xmax, ymax = board.bounds
         circles = []
         radius = 0.0625/2
-        resolution = radius*2 + 0.05
+        resolution = radius*2 + 0.2
         perturb = 0.05/2
         for x in np.arange(xmin+radius, xmax, resolution):
             for y in np.arange(ymin+radius, ymax, resolution):
@@ -663,7 +717,7 @@ if __name__ == "__main__":
     
     dfshifts = get_region_shifts(pBoards)
     
-    
+    # %% Try to run FEA using the randomly placed pressure rods
     # Run FEA with valid_circles defining the pressure rod points
-    runFEA_valid_circles(valid_circles, df_PressureRods, root)
+    strain_xx, strain_yy, strain_xy, principalStrain_min, principalStrain_max = runFEA_valid_circles(valid_circles, df_PressureRods, root, inputfile)
     
