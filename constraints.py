@@ -28,6 +28,7 @@ import matplotlib.pyplot as plt
 import runFEA
 import os
 
+# %% XML Functions
 # Get the root of the XML tree that will be used for all other input parsing
 def get_XML_tree(initialdir):
     filetypes = (("XML", ["*.xml"]),) 
@@ -45,7 +46,8 @@ def get_XML_tree(initialdir):
     treeroot = tree.getroot()
     return treeroot, inputfile
 
-########## Obtain relevant Fixture info ##########
+
+# %% Fixture Reading Functions
 # Panel, Plates
 def get_fixture_geometry(root, identifier):
     polyshapes = root.findall('.//polyshape')
@@ -109,6 +111,41 @@ def get_fixture_geometry(root, identifier):
     return region_polys, numRegions, numHoles
 
 
+def get_point_geometry(root, identifier):
+    tables = root.findall('.//table')
+    column_names = None
+    types = None
+    rows = None
+    df_output = None
+    for table in tables:
+        if table.attrib.get("identifier") == identifier:
+            column_names = []
+            for col in table.findall('.//col'):
+                column_names.append(col.text)
+            
+            types = []
+            for typ in table.findall('.//type'):
+                types.append(typ.text)
+            
+            rows = []
+            for row in table.findall('.//row'):
+                rows.append(row.text.split('|'))
+            
+            if len(column_names) != len(types) or len(column_names) != len(rows[0]):
+                raise ValueError(f"Mismatch between number of columns, types, or row elements for {identifier}")
+            
+            columns = []
+            for i in range(len(column_names)):
+                columns.append([])
+                for j in range(len(rows)):
+                    columns[i].append(interpret_type_description(types[i],rows[j][i]))
+                    
+            output_dict = {column_names[i]:columns[i] for i in range(len(column_names))}
+            df_output = pd.DataFrame(output_dict)
+             
+    return df_output
+
+
 def get_region_shifts(region_polys):
     polys_copy = region_polys.copy()
     refpoly = polys_copy.pop(0)
@@ -166,7 +203,7 @@ def check_shifted(refpoly, poly):
     return shifted, xshift, yshift
     
 
-# FEA functions
+# %% FEA functions
 def runFEA_valid_circles(valid_circles, df_PressureRods, root, inputfile):
     # Ensure correct type is used for integer columns
     df_PressureRods['unimplemented1'] = df_PressureRods['unimplemented1'].astype(int)
@@ -240,40 +277,14 @@ def runFEA_valid_circles(valid_circles, df_PressureRods, root, inputfile):
 
     for i,val in enumerate(vals):
         rowlist[i].text = val
-    # for i,val in enumerate(vals):
-    #     rowlist[i].text = val
-        
-    # for val in vals:
-    #     row = ET.SubElement(rows, 'row')
-    #     row.text = val
-    #     # # val_elem = ET.SubElement(rows, 'row')
-    #     # val_elem = ET.Element('row')
-    #     # val_elem.text = val
-    #     # rows.append(val_elem)
-    
-    # tables = root.findall('.//table')
-    # for table in tables:
-    #     if table.attrib.get("identifier") == "PressureRods":            
-    #         for row in table.findall('.//row'):
-    #             table.remove(row)
-            
-    #         for val in vals:
-    #             table.insert(val)
     
     # Write the new element tree
     tree = ET.ElementTree(root)
     ET.indent(tree, '  ')
-    # new_inputfile = 
-    # path = pathlib.Path("/path/to/file.txt")
     new_filename = "FEA_random_pressure_rods.xml"
     path, filename = os.path.split(inputfile)
     new_path = path + "/" + new_filename
-    
-    # new_path = os.inputfile.join(os.inputfile.dirname(inputfile), new_filename)
-    # inputfile.rename(new_filename)
     tree.write(new_path)
-    # with open('FEA_random_pressure_rods.xml', 'w') as f:
-    #     root.write(f, encoding='unicode')
     
     FEApath = runFEA.loadFEApath('FEApath.pk')
     runFEA.runFEA(FEApath, new_path)
@@ -285,7 +296,7 @@ def runFEA_valid_circles(valid_circles, df_PressureRods, root, inputfile):
     return strain_xx, strain_yy, strain_xy, principalStrain_min, principalStrain_max
     
 
-# Utility functions
+# %% Utility functions
 def plot_poly_list_w_holes(poly_list, fig, ax, color, linestyle, label):
     # fig, ax = plt.subplots(figsize=(10,8),dpi=300)
     # ax.set_aspect('equal')
@@ -351,59 +362,13 @@ def plot_pressurerods_standoffs(df, fig, ax, linestyle, identifier):
             first = False
         else:
             ax.plot(xe, ye, color=color, linestyle=linestyle, linewidth=0.5)
-    
-    
+
 
 def get_region_list_centroids(region_polys):
     region_centroids = [poly.centroid for poly in region_polys]
     return region_centroids
 
 
-
-# def get_table_rows(root, identifier):
-#     tables = root.findall('.//table')
-#     rows = None
-#     for table in tables:
-#         if table.attrib.get("identifier") == identifier:
-#             # Extract rows
-#             rows = []
-#             for row in table.findall('.//row'):
-#                 rows.append(row.text.split('|'))
-#     return rows
-
-def get_point_geometry(root, identifier):
-    tables = root.findall('.//table')
-    column_names = None
-    types = None
-    rows = None
-    df_output = None
-    for table in tables:
-        if table.attrib.get("identifier") == identifier:
-            column_names = []
-            for col in table.findall('.//col'):
-                column_names.append(col.text)
-            
-            types = []
-            for typ in table.findall('.//type'):
-                types.append(typ.text)
-            
-            rows = []
-            for row in table.findall('.//row'):
-                rows.append(row.text.split('|'))
-            
-            if len(column_names) != len(types) or len(column_names) != len(rows[0]):
-                raise ValueError(f"Mismatch between number of columns, types, or row elements for {identifier}")
-            
-            columns = []
-            for i in range(len(column_names)):
-                columns.append([])
-                for j in range(len(rows)):
-                    columns[i].append(interpret_type_description(types[i],rows[j][i]))
-                    
-            output_dict = {column_names[i]:columns[i] for i in range(len(column_names))}
-            df_output = pd.DataFrame(output_dict)
-             
-    return df_output
             
 
 def interpret_type_description(type_str, elem):
@@ -452,16 +417,7 @@ def random_valid_perturb(poly, outer_poly, maxmag):
     count = 0
     lim = 100
     if outer_poly.area > poly.area:
-        while count < lim:
-            # while True:
-            #     xp = random.uniform(-maxmag, maxmag)
-            #     yp = random.uniform(-maxmag, maxmag)
-            #     magnitude = np.sqrt(xp**2 + yp**2)
-            #     if magnitude > maxmag:
-            #         continue
-            #     else:
-            #         break
-                
+        while count < lim:                
             # Approach: Choose a random magnitude, then choose the first
             # component randomly that would give that magnitude, then solve
             # for the remaining component
@@ -497,7 +453,6 @@ if __name__ == "__main__":
         FEApath = pickle.load(fi)
     
     initialdir = str(pathlib.Path(FEApath).parent) + "Examples"
-    # pBoards_regions_df, pBoards_holes_df = parse_input_xml(initialdir)
     root, inputfile = get_XML_tree(initialdir)
     
     # Panel
@@ -635,6 +590,7 @@ if __name__ == "__main__":
         plot_poly_list_w_holes(pComponentsTop, fig3, ax3, "purple", line, "pComponentsTop")
     plot_poly_list_w_holes(pBoards_dilated, fig3, ax3, "blue", line, "pBoards_dilated")
     
+    ## THIS SHOULD BE A FUNCTION, NOT WRITTEN OUT IN THE MAIN FUNCTION
     # Place circles on grid within UUT
     valid_circles = []
     first = True
@@ -665,7 +621,7 @@ if __name__ == "__main__":
             # within spec. Force rods can't be too close together.
         
         # Validate that each circle falls inside shape
-        valid_circles.extend(filter(board.contains, circles)) # FIX: This is an old version that doesn't check for multipolygons. Some circle overlaps exist
+        valid_circles.extend(filter(board.contains, circles)) # FIXME: This is an old version that doesn't check for multipolygons. Some circle overlaps exist
         
         # Plot circles
         for circle in valid_circles:
