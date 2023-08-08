@@ -203,6 +203,176 @@ def check_shifted(refpoly, poly):
     return shifted, xshift, yshift
     
 
+#%% Circle placing functions
+def place_circle(x,y,radius):
+    circle = Point(x, y).buffer(radius)
+    return circle
+
+def random_perturb(poly, maxmag):
+    while True:
+        xp = random.uniform(-maxmag, maxmag)
+        yp = random.uniform(-maxmag, maxmag)
+        magnitude = np.sqrt(xp**2 + yp**2)
+        if magnitude > maxmag:
+            continue
+        else:
+            break
+    
+    # Adjust polygon by perturbation
+    xe, ye = poly.exterior.xy
+    xe = list(xe)
+    ye = list(ye)
+    xe_perturb = [x+xp for x in xe]
+    ye_perturb = [y+yp for y in ye]
+    xpyp = zip(xe_perturb, ye_perturb)
+    xpyp = tuple(xpyp)
+    poly_perturb = Polygon(xpyp)
+    return poly_perturb
+
+def random_valid_perturb(poly, outer_poly, maxmag):
+    count = 0
+    lim = 100
+    if outer_poly.area > poly.area:
+        while count < lim:                
+            # Approach: Choose a random magnitude, then choose the first
+            # component randomly that would give that magnitude, then solve
+            # for the remaining component
+            mag = random.uniform(0, maxmag)
+            xp = random.uniform(-mag, mag)
+            yp = np.sqrt(mag**2 - xp**2)
+            yp = random.choice([yp, -yp])
+                
+            # Adjust polygon by perturbation
+            xe, ye = poly.exterior.xy
+            xe = list(xe)
+            ye = list(ye)
+            xe_perturb = [x+xp for x in xe]
+            ye_perturb = [y+yp for y in ye]
+            xpyp = zip(xe_perturb, ye_perturb)
+            xpyp = tuple(xpyp)
+            poly_perturb = Polygon(xpyp)
+            
+            if outer_poly.contains(poly_perturb):
+                break
+            else:
+                count += 1
+        return poly_perturb
+    else:
+        return poly
+
+class PressureRod():
+    def __init__(self, x, y, rod_type):
+        self.x = x
+        self.y = y
+        self.rod_type = rod_type
+        self.ctc = 0.375
+        self.update_pressure_rod(self.x, self.y, self.rod_type)        
+        
+    def select_rod_type(self, rod_type):
+        if rod_type == 'Press-Fit Tapered':
+            dtop = 0.25
+            dtip = 0.09
+        elif rod_type == 'Press-Fit Flat':
+            dtop = 0.25
+            dtip = 0.19
+        elif rod_type == '3.325" Tapered':
+            dtop = 0.315
+            dtip = 0.10
+        elif rod_type == '3.325" Flat':
+            dtop = 0.315
+            dtip = 0.315
+        else:
+            raise ValueError("ERROR: Invalid rod_type string")
+        self.rod_type = rod_type
+        self.dtop = dtop
+        self.dtip = dtip
+        
+    def update_pressure_rod(self, new_x, new_y, new_rod_type):
+        self.x = new_x
+        self.y = new_y
+        self.select_rod_type(new_rod_type)
+        self.rtip = self.dtip/2.0
+        self.rtop = self.dtop/2.0
+        self.tip = place_circle(new_x, new_y, self.rtip)
+        self.top = place_circle(new_x, new_y, self.rtop)
+        self.tip_from_components = self.rtip + 0.0625
+        self.top_from_components = self.rtop + 0.0625
+        self.tip_from_UUT_edge = self.rtip + 0.0
+        self.tip_from_top_probes = self.rtip + 0.125
+        self.top_from_top_probes = self.rtop + 0.125
+        self.tip_component_buffer = place_circle(new_x, new_y, self.rtip + self.tip_from_components)
+        self.top_component_buffer = place_circle(new_x, new_y, self.rtop + self.top_from_components)
+        self.tip_UUT_buffer = place_circle(new_x, new_y, self.rtip + self.tip_from_UUT_edge)
+        self.tip_from_top_probe_buffer = place_circle(new_x, new_y, self.rtip + self.tip_from_top_probes)
+        self.top_from_top_probe_buffer = place_circle(new_x, new_y, self.rtop + self.top_from_top_probes)
+        
+
+def fill_UUT_marching(UUT_ext, constraint_def):
+    # Offset inward the outer boundary of a UUT and place pressure rods at
+    # the appropriate spacing along the boundary. Randomly select which rod
+    # type to use, and check if the rod type is valid. If it isn't valid, try
+    # each other rod type until one fits. If it doesn't, discard the pressure
+    # rod.
+    
+    # When the offset boundary has been filled, offset the offset and continue
+    # until some condition (could be a minimum bounding box dimension for
+    # simplicity)
+    
+    buffer_dist = 0.25
+    ctc = 0.375
+    xmin = 0.375
+    ymin = 0.375
+    pressurerods = []
+    
+    rod_types = ['Press-Fit Tapered',
+                 'Press-Fit Flat',
+                 '3.325" Tapered',
+                 '3.325" Flat']
+    
+    marching = True
+    boundary = UUT_ext
+    while marching:
+        offset = buffer(boundary,-buffer_dist)
+        line = offset.exterior # FIXME: Add something here to deal with MultiPolygons
+        distances = np.arange(0, line.length, ctc)
+        points = [line.interpolate(distance) for distance in distances] + line.boundary[1]
+        for point in points:
+            # Randomly select rod_type
+            random.shuffle(rod_types)
+            valid = False
+            
+            while i < len(rod_types):
+                # Create pressure rod at current point location and add it to the list
+                pr = PressureRod(point.x, point.y, rod_types[i])
+                
+                # Check if the pressure_rod is valid
+                
+                if valid == False:
+                    continue
+                else:
+                    break
+                
+            if valid == True:
+                pressurerods.append(pr)
+                
+        # Once all points have been addressed, check if the boundary can be
+        # offset in again. If it can, marching remains True. If not, marching
+        # becomes False and the loop terminates with a full list of valid
+        # pressurerods.
+        offset_offset = buffer(offset, -buffer_dist)
+        (minx, miny, maxx, maxy) = offset_offset.bounds
+        if (maxx-minx < xmin) or (maxy-miny < ymin):
+            marching = False
+        else:
+            boundary = offset
+            
+    return pressurerods
+            
+            
+                
+            
+    
+
 # %% FEA functions
 def runFEA_valid_circles(valid_circles, df_PressureRods, root, inputfile):
     # Ensure correct type is used for integer columns
@@ -367,9 +537,7 @@ def plot_pressurerods_standoffs(df, fig, ax, linestyle, identifier):
 def get_region_list_centroids(region_polys):
     region_centroids = [poly.centroid for poly in region_polys]
     return region_centroids
-
-
-            
+           
 
 def interpret_type_description(type_str, elem):
     if type_str == "double":
@@ -386,64 +554,6 @@ def interpret_type_description(type_str, elem):
             return False
         else:
             return True
-    
-
-def place_circle(x,y,radius):
-    circle = Point(x, y).buffer(radius)
-    return circle
-
-def random_perturb(poly, maxmag):
-    while True:
-        xp = random.uniform(-maxmag, maxmag)
-        yp = random.uniform(-maxmag, maxmag)
-        magnitude = np.sqrt(xp**2 + yp**2)
-        if magnitude > maxmag:
-            continue
-        else:
-            break
-    
-    # Adjust polygon by perturbation
-    xe, ye = poly.exterior.xy
-    xe = list(xe)
-    ye = list(ye)
-    xe_perturb = [x+xp for x in xe]
-    ye_perturb = [y+yp for y in ye]
-    xpyp = zip(xe_perturb, ye_perturb)
-    xpyp = tuple(xpyp)
-    poly_perturb = Polygon(xpyp)
-    return poly_perturb
-
-def random_valid_perturb(poly, outer_poly, maxmag):
-    count = 0
-    lim = 100
-    if outer_poly.area > poly.area:
-        while count < lim:                
-            # Approach: Choose a random magnitude, then choose the first
-            # component randomly that would give that magnitude, then solve
-            # for the remaining component
-            mag = random.uniform(0, maxmag)
-            xp = random.uniform(-mag, mag)
-            yp = np.sqrt(mag**2 - xp**2)
-            yp = random.choice([yp, -yp])
-                
-            # Adjust polygon by perturbation
-            xe, ye = poly.exterior.xy
-            xe = list(xe)
-            ye = list(ye)
-            xe_perturb = [x+xp for x in xe]
-            ye_perturb = [y+yp for y in ye]
-            xpyp = zip(xe_perturb, ye_perturb)
-            xpyp = tuple(xpyp)
-            poly_perturb = Polygon(xpyp)
-            
-            if outer_poly.contains(poly_perturb):
-                break
-            else:
-                count += 1
-        return poly_perturb
-    else:
-        return poly
-
 
 # %% Load data and read in the XML definition
 if __name__ == "__main__":
