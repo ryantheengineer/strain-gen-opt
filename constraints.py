@@ -27,6 +27,7 @@ import pathlib
 import matplotlib.pyplot as plt
 import runFEA
 import os
+import time
 
 # %% XML Functions
 # Get the root of the XML tree that will be used for all other input parsing
@@ -649,6 +650,7 @@ if __name__ == "__main__":
     initialdir = str(pathlib.Path(FEApath).parent) + "Examples"
     root, inputfile = get_XML_tree(initialdir)
     
+    print("--- Reading in UUT geometry ---")
     # Panel
     pBoards, _, _ = get_fixture_geometry(root, "pBoards")
     pOutline, _, _ = get_fixture_geometry(root, "pOutline")
@@ -668,17 +670,23 @@ if __name__ == "__main__":
     df_Standoffs = get_point_geometry(root, "Standoffs")
     
     # Estimate a number of pressure rods for the top side that would make sense
+    print("--- Estimating possible pressure rods ---")
     nprods_small, nprods_large, pBoards_diff = grid_nprods(pBoards,pComponentsTop)
     
     # Choose the largest number of variables between len(df_PressureRods),
     # nprods_small, and nprods_large
+    print("--- Selecting pressure rod quantity ---")
     nprods = 100
     # nprods = np.max([len(df_PressureRods), nprods_small, nprods_large])
     
     # Generate random population of pressure rod designs
     npop = 10
-    chromosomes = [create_chromosome(nprods,pBoards,pComponentsTop) for _ in range(npop)]
+    start_time = time.time()
+    print(f"--- Generating population of {npop} chromosomes with {nprods*4} variables each---")
+    chromosomes = [create_chromosome(nprods,pBoards,pComponentsTop) for _ in range(npop)] # Could this be modified to use multiprocessing? This will become very time intensive with larger populations
+    print(f"--- Population generated in {(time.time()-start_time)/60} minutes ---")
     
+    print("--- COMPLETE ---")
     
     # NOTE: As of 8/12, there needs to be a function for interpreting chromosomes
     # and turning them into XML that can be run in FEA, as well as plotting
