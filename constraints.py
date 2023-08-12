@@ -261,12 +261,13 @@ def random_valid_perturb(poly, outer_poly, maxmag):
         return poly
 
 class PressureRod():
-    def __init__(self, x, y, rod_type):
+    def __init__(self, x, y, rod_type, on):
         self.x = x
         self.y = y
         self.rod_type = rod_type
+        self.on = on
         self.ctc = 0.375
-        self.update_pressure_rod(self.x, self.y, self.rod_type)        
+        self.update_pressure_rod(self.x, self.y, self.rod_type, self.on)        
         
     def select_rod_type(self, rod_type):
         if rod_type == 'Press-Fit Tapered':
@@ -287,7 +288,7 @@ class PressureRod():
         self.dtop = dtop
         self.dtip = dtip
         
-    def update_pressure_rod(self, new_x, new_y, new_rod_type):
+    def update_pressure_rod(self, new_x, new_y, new_rod_type, new_on):
         self.x = new_x
         self.y = new_y
         self.select_rod_type(new_rod_type)
@@ -305,71 +306,147 @@ class PressureRod():
         self.tip_UUT_buffer = place_circle(new_x, new_y, self.rtip + self.tip_from_UUT_edge)
         self.tip_from_top_probe_buffer = place_circle(new_x, new_y, self.rtip + self.tip_from_top_probes)
         self.top_from_top_probe_buffer = place_circle(new_x, new_y, self.rtop + self.top_from_top_probes)
+        self.on = new_on
         
+        
+        
+def grid_nprods(pBoards, pComponentsTop):
+    ### Randomly place pressure rod circles on top side of board ###
+    # Add buffers around components and edge of boards
+    # buffer_dist = 0.025
+    pBoards_diff = []
+    for board in pBoards:
+        UUT_poly_ext = Polygon(board.exterior.coords)
+        # UUT_poly_dilated_ext = buffer(UUT_poly_ext,-buffer_dist)
+        pBoards_diff.append(UUT_poly_ext)
+    
+    topcomponents = []
+    for inner in pComponentsTop:
+        topcomponents.append(inner)
+    
+    topcomponents = unary_union(topcomponents)
+    if topcomponents.geom_type == "MultiPolygon":
+        topcomponents = list(topcomponents.geoms)
+    
+    # Subtract interiors from the exterior polygon or multipolygon
+    for i,board in enumerate(pBoards_diff):
+        for inner in topcomponents:
+            if inner.intersects(board):
+                pBoards_diff[i] = pBoards_diff[i].difference(inner)
+    
+    # Place circles on grid within UUT
+    valid_prods_small = []
+    valid_prods_large = []
+    for board in pBoards_diff:
+        # FIXME: Here this should iterate on the polygons that define the 
+        # available space, not the outline of the PCBs. Each PCB could have
+        # several possible areas that could have a new grid of circles in it.
+        # Additionally, every area that could have a circle, should have a
+        # circle to make sure the optimization fully explores the design space.
+        # The grid resolution concept may need to be improved on to make this
+        # happen.
+        
+        xmin, ymin, xmax, ymax = board.bounds
+        prods_sm = []
+        prods_lg = []
+        radius_sm = 0.09/2
+        radius_lg = 0.315/2
+        resolution = 0.375
+        # perturb = 0.05/2
+        for x in np.arange(xmin+radius_sm, xmax, resolution):
+            for y in np.arange(ymin+radius_sm, ymax, resolution):
+                c_sm = place_circle(x, y, radius_sm)
+                prods_sm.append(c_sm)
+        for x in np.arange(xmin+radius_lg, xmax, resolution):
+            for y in np.arange(ymin+radius_lg, ymax, resolution):
+                c_lg = place_circle(x, y, radius_lg)
+                prods_lg.append(c_lg)
+                
+        
+        
+        # # Randomly perturb each circle
+        # for i,circle in enumerate(circles):
+        #     circles[i] = random_valid_perturb(circle, board, perturb)
+        #     # circles[i] = random_perturb(circle, perturb)
+        #     # NOTE: Before accepting randomly perturbed circle, make sure it is 
+        #     # within spec. Force rods can't be too close together.
+        
+        # Validate that each circle falls inside shape
+        valid_prods_small.extend(filter(board.contains, prods_sm)) # FIXME: This is an old version that doesn't check for multipolygons. Some circle overlaps exist
+        valid_prods_large.extend(filter(board.contains, prods_lg)) # FIXME: This is an old version that doesn't check for multipolygons. Some circle overlaps exist
+        
+    nprods_small = len(valid_prods_small)
+    nprods_large = len(valid_prods_large)
+    
+    return nprods_small, nprods_large, pBoards_diff
 
-def fill_UUT_marching(UUT_ext, constraint_def):
-    # Offset inward the outer boundary of a UUT and place pressure rods at
-    # the appropriate spacing along the boundary. Randomly select which rod
-    # type to use, and check if the rod type is valid. If it isn't valid, try
-    # each other rod type until one fits. If it doesn't, discard the pressure
-    # rod.
+
+def create_chromosome(nprods,pBoards,pComponentsTop):
+    # Initialize random chromosome, where the first ncircles entries are
+    # the x coordinates, the next ncircles entries are y coordinates, then
+    # radii, and on/off binary values
     
-    # When the offset boundary has been filled, offset the offset and continue
-    # until some condition (could be a minimum bounding box dimension for
-    # simplicity)
+    # Get pBoards as a MultiPolygon so pressure rods can be placed
+    # anywhere within the UUT grid
+    pBoards_multi = MultiPolygon(pBoards_diff)
     
-    buffer_dist = 0.25
-    ctc = 0.375
-    xmin = 0.375
-    ymin = 0.375
-    pressurerods = []
+    topcomponents = []
+    for inner in pComponentsTop:
+        topcomponents.append(inner)
     
+    topcomponents = unary_union(topcomponents)
+    if topcomponents.geom_type != "MultiPolygon":
+        topcomponents = MultiPolygon(topcomponents)
+    
+    xmin, ymin, xmax, ymax = pBoards_multi.bounds
     rod_types = ['Press-Fit Tapered',
                  'Press-Fit Flat',
                  '3.325" Tapered',
                  '3.325" Flat']
     
-    marching = True
-    boundary = UUT_ext
-    while marching:
-        offset = buffer(boundary,-buffer_dist)
-        line = offset.exterior # FIXME: Add something here to deal with MultiPolygons
-        distances = np.arange(0, line.length, ctc)
-        points = [line.interpolate(distance) for distance in distances] + line.boundary[1]
-        for point in points:
-            # Randomly select rod_type
-            random.shuffle(rod_types)
-            valid = False
+    chromosome_x = []
+    chromosome_y = []
+    chromosome_rod_type = []
+    chromosome_on = []
+    prods_chosen = []
+    while len(chromosome_x) < nprods:
+        valid = True
+        x = random.uniform(xmin,xmax)
+        y = random.uniform(ymin,ymax)
+        rod_type_i = random.randint(0,3)
+        on = random.randint(0,1)
+        prod = PressureRod(x,y,rod_types[rod_type_i],on)
+        
+        # Make sure pressure rod is within the UUT and make sure it doesn't intersect any components, using the appropriate buffer sizes
+        if not prod.tip_UUT_buffer.within(pBoards_multi) and prod.tip_component_buffer.intersects(topcomponents):
+            continue
+        
+        # Make sure the pressure rod isn't too close to any top probes
+        ###     CODE TO GO HERE FOR CHECKING NO CONFLICTS WITH TOP PROBES
             
-            while i < len(rod_types):
-                # Create pressure rod at current point location and add it to the list
-                pr = PressureRod(point.x, point.y, rod_types[i])
-                
-                # Check if the pressure_rod is valid
-                
-                if valid == False:
-                    continue
-                else:
-                    break
-                
-            if valid == True:
-                pressurerods.append(pr)
-                
-        # Once all points have been addressed, check if the boundary can be
-        # offset in again. If it can, marching remains True. If not, marching
-        # becomes False and the loop terminates with a full list of valid
-        # pressurerods.
-        offset_offset = buffer(offset, -buffer_dist)
-        (minx, miny, maxx, maxy) = offset_offset.bounds
-        if (maxx-minx < xmin) or (maxy-miny < ymin):
-            marching = False
-        else:
-            boundary = offset
+        # Make sure pressure rod doesn't conflict with any previously-placed pressure rods
+        for prod_chosen in prods_chosen:
+            dist = centroid_distance(prod.tip,prod_chosen.tip)
+            if dist < prod.ctc:
+                valid = False
+                break
+        if valid == False:
+            continue
+        
+        if valid == True:
+            prods_chosen.append(prod)
+            chromosome_x.append(prod.x)
+            chromosome_y.append(prod.y)
+            chromosome_rod_type.append(rod_type_i)
+            chromosome_on.append(on)
             
-    return pressurerods
-            
-            
-                
+    chromosome = []
+    chromosome.extend(chromosome_x)
+    chromosome.extend(chromosome_y)
+    chromosome.extend(chromosome_rod_type)
+    chromosome.extend(chromosome_on)
+
+    return chromosome
             
     
 
@@ -555,6 +632,13 @@ def interpret_type_description(type_str, elem):
         else:
             return True
 
+def centroid_distance(poly1,poly2):
+    x1 = poly1.centroid.x
+    y1 = poly1.centroid.y
+    x2 = poly2.centroid.x
+    y2 = poly2.centroid.y
+    return np.sqrt((x2-x1)**2 + (y2-y1)**2)
+
 # %% Load data and read in the XML definition
 if __name__ == "__main__":
     # Load previously chosen FEA path here
@@ -571,21 +655,6 @@ if __name__ == "__main__":
     pShape, _, _ = get_fixture_geometry(root, "pShape")
     pComponentsTop, _, _ = get_fixture_geometry(root, "pComponentsTop")
     pComponentsBot, _, _ = get_fixture_geometry(root, "pComponentsBot")
-    # fig1, ax1 = plt.subplots(figsize=(10,8),dpi=300)
-    # ax1.set_aspect('equal')
-    # labels = []
-    # line = "-"
-    # if pBoards:
-    #     plot_poly_list_w_holes(pBoards, fig1, ax1, "blue", line, "pBoards")
-    # if pOutline:
-    #     plot_poly_list_w_holes(pOutline, fig1, ax1, "green", line, "pOutline")
-    # if pShape:
-    #     plot_poly_list_w_holes(pShape, fig1, ax1, "black", line, "pShape")
-    # if pComponentsTop:
-    #     plot_poly_list_w_holes(pComponentsTop, fig1, ax1, "purple", line, "pComponentsTop")
-    # if pComponentsBot:
-    #     plot_poly_list_w_holes(pComponentsBot, fig1, ax1, "orange", line, "pComponentsBot")
-    # ax1.legend()
     
     # Plates
     Pressure, _, _ = get_fixture_geometry(root, "Pressure")
@@ -598,192 +667,29 @@ if __name__ == "__main__":
     df_PressureRods = get_point_geometry(root, "PressureRods")
     df_Standoffs = get_point_geometry(root, "Standoffs")
     
-    # #########################################################################
-    # ############# Plot Plates and Features ##############################
-    # #########################################################################
-    # # Top Plate/Pressure Plate (doesn't hold pressure rods if I_plate exists)
-    # if I_Plate:
-    #     fig1, ax1 = plt.subplots(figsize=(10,8),dpi=500)
-    #     line="-"
-    #     plot_poly_list_w_holes(I_Plate, fig1, ax1, "blue", line, "I_Plate")
-    #     plot_poly_list_w_holes(Pressure, fig1, ax1, "red", line, "Pressure")
-    #     if pBoards:
-    #         plot_poly_list_w_holes(pBoards, fig1, ax1, "black", line, "pBoards")
-    #     if pComponentsTop:
-    #         plot_poly_list_w_holes(pComponentsTop, fig1, ax1, "purple", line, "pComponentsTop")
-    #     if df_PressureRods is not None:
-    #         plot_pressurerods_standoffs(df_PressureRods, fig1, ax1, line, "PressureRods")
-    #     ax1.set_title("Pressure and Intermediate Plates")
-    #     ax1.legend()
-    # else:
-    #     print("\nExample has no intermediate plate\n")
-    #     fig1, ax1 = plt.subplots(figsize=(10,8),dpi=500)
-    #     line="-"
-    #     plot_poly_list_w_holes(Pressure, fig1, ax1, "blue", line, "Pressure")
-    #     if pBoards:
-    #         plot_poly_list_w_holes(pBoards, fig1, ax1, "black", line, "pBoards")
-    #     if pComponentsTop:
-    #         plot_poly_list_w_holes(pComponentsTop, fig1, ax1, "purple", line, "pComponentsTop")
-    #     if df_PressureRods is not None:
-    #         plot_pressurerods_standoffs(df_PressureRods, fig1, ax1, line, "PressureRods")
-    #     ax1.set_title("Pressure Plate")
-    #     ax1.legend()
-        
-    # # Probe Protector Plate (Stripper Plate)
-    # if Stripper:
-    #     fig2, ax2 = plt.subplots(figsize=(10,8),dpi=500)
-    #     line="-"
-    #     plot_poly_list_w_holes(Stripper, fig2, ax2, "blue", line, "Stripper")
-    #     plot_poly_list_w_holes(Probe, fig2, ax2, "red", line, "Probe")
-    #     if pBoards:
-    #         plot_poly_list_w_holes(pBoards, fig2, ax2, "black", line, "pBoards")
-    #     if pComponentsBot:
-    #         plot_poly_list_w_holes(pComponentsBot, fig2, ax2, "purple", line, "pComponentsBot")
-    #     if df_Probes is not None:
-    #         plot_probes_guidepins(df_Probes, fig2, ax2, line, "Probes")
-    #     if df_GuidePins is not None:
-    #         plot_probes_guidepins(df_GuidePins, fig2, ax2, line, "GuidePins")
-    #     if df_Standoffs is not None:
-    #         plot_pressurerods_standoffs(df_Standoffs, fig2, ax2, line, "Standoffs")
-    #     ax2.set_title("Probe and Probe Protector (Stripper)Plates")
-    #     ax2.legend()
-    # else:
-    #     print("\nExample has no probe protector plate (stripper plate)\n")
-    #     fig2, ax2 = plt.subplots(figsize=(10,8),dpi=500)
-    #     line="-"
-    #     plot_poly_list_w_holes(Probe, fig2, ax2, "red", line, "Probe")
-    #     if pBoards:
-    #         plot_poly_list_w_holes(pBoards, fig2, ax2, "black", line, "pBoards")
-    #     if pComponentsBot:
-    #         plot_poly_list_w_holes(pComponentsBot, fig2, ax2, "purple", line, "pComponentsBot")
-    #     if df_Probes is not None:
-    #         plot_probes_guidepins(df_Probes, fig2, ax2, line, "Probes")
-    #     if df_GuidePins is not None:
-    #         plot_probes_guidepins(df_GuidePins, fig2, ax2, line, "GuidePins")
-    #     if df_Standoffs is not None:
-    #         plot_pressurerods_standoffs(df_Standoffs, fig2, ax2, line, "Standoffs")
-    #     ax2.set_title("Probe and Probe Protector (Stripper)Plates")
-    #     ax2.legend()
-        
-    # # plt.show()
+    # Estimate a number of pressure rods for the top side that would make sense
+    nprods_small, nprods_large, pBoards_diff = grid_nprods(pBoards,pComponentsTop)
     
-    # %% Place pressure rods
-    ### Randomly place pressure rod circles on top side of board ###
-    # Add buffers around components and edge of boards
-    buffer_dist = 0.025
-    pBoards_dilated = []
-    for board in pBoards:
-        UUT_poly_ext = Polygon(board.exterior.coords)
-        UUT_poly_dilated_ext = buffer(UUT_poly_ext,-buffer_dist)
-        pBoards_dilated.append(UUT_poly_dilated_ext)
+    # Choose the largest number of variables between len(df_PressureRods),
+    # nprods_small, and nprods_large
+    nprods = 100
+    # nprods = np.max([len(df_PressureRods), nprods_small, nprods_large])
     
-    topcomponents_dilated = []
-    for inner in pComponentsTop:
-        topcomponents_dilated.append(buffer(inner, buffer_dist))
-    
-    topcomponents_dilated = unary_union(topcomponents_dilated)
-    if topcomponents_dilated.geom_type == "MultiPolygon":
-        topcomponents_dilated = list(topcomponents_dilated.geoms)
-    
-    # Subtract dilated interiors from the exterior polygon or multipolygon
-    for i,board in enumerate(pBoards_dilated):
-        for inner in topcomponents_dilated:
-            if inner.intersects(board):
-                pBoards_dilated[i] = pBoards_dilated[i].difference(inner)
-                
-    # Plot the original board with components and then the dilated version
-    fig3, ax3 = plt.subplots(figsize=(10,8),dpi=500)
-    ax3.set_aspect('equal')
-    line="-"
-    plot_poly_list_w_holes(pBoards, fig3, ax3, "black", line, "pBoards")
-    if pComponentsTop:
-        plot_poly_list_w_holes(pComponentsTop, fig3, ax3, "purple", line, "pComponentsTop")
-    plot_poly_list_w_holes(pBoards_dilated, fig3, ax3, "blue", line, "pBoards_dilated")
-    
-    ## THIS SHOULD BE A FUNCTION, NOT WRITTEN OUT IN THE MAIN FUNCTION
-    # Place circles on grid within UUT
-    valid_circles = []
-    first = True
-    for board in pBoards_dilated:
-        # FIXME: Here this should iterate on the polygons that define the 
-        # available space, not the outline of the PCBs. Each PCB could have
-        # several possible areas that could have a new grid of circles in it.
-        # Additionally, every area that could have a circle, should have a
-        # circle to make sure the optimization fully explores the design space.
-        # The grid resolution concept may need to be improved on to make this
-        # happen.
-        
-        xmin, ymin, xmax, ymax = board.bounds
-        circles = []
-        radius = 0.0625/2
-        resolution = radius*2 + 0.2
-        perturb = 0.05/2
-        for x in np.arange(xmin+radius, xmax, resolution):
-            for y in np.arange(ymin+radius, ymax, resolution):
-                c = place_circle(x, y, radius)
-                circles.append(c)
-        
-        # Randomly perturb each circle
-        for i,circle in enumerate(circles):
-            circles[i] = random_valid_perturb(circle, board, perturb)
-            # circles[i] = random_perturb(circle, perturb)
-            # NOTE: Before accepting randomly perturbed circle, make sure it is 
-            # within spec. Force rods can't be too close together.
-        
-        # Validate that each circle falls inside shape
-        valid_circles.extend(filter(board.contains, circles)) # FIXME: This is an old version that doesn't check for multipolygons. Some circle overlaps exist
-        
-        # Plot circles
-        for circle in valid_circles:
-            xe, ye = circle.exterior.xy
-            if first==True:
-                ax3.plot(xe, ye, color="red", label="random pressure rods")
-                first = False
-            else:
-                ax3.plot(xe, ye, color="red")
-                
-    
-    ax3.set_title("Dilated boundaries around board and components")
-    ax3.legend()
-        
-    plt.show()
-    
-    # labels = []
-    # line = ":"
-    # if Pressure:
-    #     plot_poly_list_w_holes(Pressure, fig1, ax1, "blue", line, "Pressure")
-    # if I_Plate:
-    #     plot_poly_list_w_holes(I_Plate, fig1, ax1, "green", line, "I_Plate")
-    # if Stripper:
-    #     plot_poly_list_w_holes(Stripper, fig1, ax1, "black", line, "Stripper")
-    # if Probe:
-    #     plot_poly_list_w_holes(Probe, fig1, ax1, "purple", line, "Probe")
-    # if Countersink:
-    #     plot_poly_list_w_holes(Countersink, fig1, ax1, "orange", line, "Countersink")
+    # Generate random population of pressure rod designs
+    npop = 10
+    chromosomes = [create_chromosome(nprods,pBoards,pComponentsTop) for _ in range(npop)]
     
     
-    # line = "-"
-    # if df_Probes is not None:
-    #     plot_probes_guidepins(df_Probes, fig1, ax1, line, "Probes")
-    # if df_GuidePins is not None:
-    #     plot_probes_guidepins(df_GuidePins, fig1, ax1, line, "GuidePins")
-    # if df_PressureRods is not None:
-    #     plot_pressurerods_standoffs(df_PressureRods, fig1, ax1, line, "PressureRods")
-    # if df_Standoffs is not None:
-    #     plot_pressurerods_standoffs(df_Standoffs, fig1, ax1, line, "Standoffs")
-    
-    # ax1.legend()
-    
-    # plot_poly_list_w_holes(pBoards)
-    # print(f"Regions:\t{numRegions}\nHoles:\t{numHoles}")
+    # NOTE: As of 8/12, there needs to be a function for interpreting chromosomes
+    # and turning them into XML that can be run in FEA, as well as plotting
+    # them for quick reference and looking at the progression of designs as
+    # generations age.
     
     
     
     
     
-    dfshifts = get_region_shifts(pBoards)
-    
-    # %% Try to run FEA using the randomly placed pressure rods
-    # Run FEA with valid_circles defining the pressure rod points
-    strain_xx, strain_yy, strain_xy, principalStrain_min, principalStrain_max = runFEA_valid_circles(valid_circles, df_PressureRods, root, inputfile)
-    
+    # NOTE ABOUT CUSTOM MUTATION FUNCTION:
+        # Include a parent preference so if the genes from two parents conflict
+        # in a child, one parent's genes are preferred over the other in order
+        # to make sure the child is valid
