@@ -28,6 +28,8 @@ import matplotlib.pyplot as plt
 import runFEA
 import os
 import time
+import multiprocessing
+import queue
 
 # %% XML Functions
 # Get the root of the XML tree that will be used for all other input parsing
@@ -49,6 +51,41 @@ def get_XML_tree(initialdir):
 
 
 # %% Fixture Reading Functions
+# Super function for getting fixture data
+def get_constraint_geometry():
+    # Load previously chosen FEA path here
+    filename = 'FEApath.pk'
+    with open(filename, 'rb') as fi:
+        FEApath = pickle.load(fi)
+    
+    initialdir = str(pathlib.Path(FEApath).parent) + "Examples"
+    root, inputfile = get_XML_tree(initialdir)
+    
+    print("--- Reading in UUT geometry ---")
+    # Panel
+    pBoards, _, _ = get_fixture_geometry(root, "pBoards")
+    pOutline, _, _ = get_fixture_geometry(root, "pOutline")
+    pShape, _, _ = get_fixture_geometry(root, "pShape")
+    pComponentsTop, _, _ = get_fixture_geometry(root, "pComponentsTop")
+    pComponentsBot, _, _ = get_fixture_geometry(root, "pComponentsBot")
+    
+    # Plates
+    Pressure, _, _ = get_fixture_geometry(root, "Pressure")
+    I_Plate, _, _ = get_fixture_geometry(root, "I_Plate")
+    Stripper, _, _ = get_fixture_geometry(root, "Stripper")
+    Probe, _, _ = get_fixture_geometry(root, "Probe")
+    Countersink, _, _ = get_fixture_geometry(root, "Countersink")
+    df_Probes = get_point_geometry(root, "Probes")
+    df_GuidePins = get_point_geometry(root, "GuidePins")
+    df_PressureRods = get_point_geometry(root, "PressureRods")
+    df_Standoffs = get_point_geometry(root, "Standoffs")
+    
+    results = (root, inputfile, pBoards, pOutline, pShape, pComponentsTop,
+               pComponentsBot, Pressure, I_Plate, Stripper, Probe, Countersink,
+               df_Probes, df_GuidePins, df_PressureRods, df_Standoffs)
+    return results
+
+
 # Panel, Plates
 def get_fixture_geometry(root, identifier):
     polyshapes = root.findall('.//polyshape')
@@ -382,7 +419,7 @@ def grid_nprods(pBoards, pComponentsTop):
     return nprods_small, nprods_large, pBoards_diff
 
 
-def create_chromosome(nprods,pBoards,pComponentsTop):
+def create_chromosome(nprods, pBoards, pComponentsTop, df_Probes, pBoards_diff):
     # Initialize random chromosome, where the first ncircles entries are
     # the x coordinates, the next ncircles entries are y coordinates, then
     # radii, and on/off binary values
@@ -390,6 +427,16 @@ def create_chromosome(nprods,pBoards,pComponentsTop):
     # Get pBoards as a MultiPolygon so pressure rods can be placed
     # anywhere within the UUT grid
     pBoards_multi = MultiPolygon(pBoards_diff)
+    
+    df_Probes_top = df_Probes[df_Probes["side"]==1]
+    df_Probes_top.reset_index(inplace=True)
+    top_probes = []
+    for i,row in df_Probes_top.iterrows():
+        top_probes.append(place_circle(row.x, row.y, row.diameter/2))
+        
+    top_probes = unary_union(top_probes)
+    if top_probes.geom_type != "MultiPolygon":
+        top_probes = MultiPolygon(top_probes)
     
     topcomponents = []
     for inner in pComponentsTop:
@@ -419,11 +466,14 @@ def create_chromosome(nprods,pBoards,pComponentsTop):
         prod = PressureRod(x,y,rod_types[rod_type_i],on)
         
         # Make sure pressure rod is within the UUT and make sure it doesn't intersect any components, using the appropriate buffer sizes
-        if not prod.tip_UUT_buffer.within(pBoards_multi) and prod.tip_component_buffer.intersects(topcomponents):
+        if not prod.tip_UUT_buffer.within(pBoards_multi):
+            continue
+        if prod.tip_component_buffer.intersects(topcomponents):
             continue
         
         # Make sure the pressure rod isn't too close to any top probes
-        ###     CODE TO GO HERE FOR CHECKING NO CONFLICTS WITH TOP PROBES
+        if prod.tip_from_top_probe_buffer.intersects(top_probes):
+            continue
             
         # Make sure pressure rod doesn't conflict with any previously-placed pressure rods
         for prod_chosen in prods_chosen:
@@ -449,7 +499,47 @@ def create_chromosome(nprods,pBoards,pComponentsTop):
 
     return chromosome
             
+
+def worker_function(result_queue,nprods,pBoards, pComponentsTop, df_Probes, pBoards_diff):
+    while True:
+        chromosome = create_chromosome(nprods, pBoards, pComponentsTop, df_Probes, pBoards_diff)
+        result_queue.put(chromosome)
+        
+def initialize_population_multiprocessing(nchromosomes, nprods, pBoards, pComponentsTop, df_Probes, pBoards_diff):
+    num_processes = multiprocessing.cpu_count()  # Number of available CPU cores
+    result_queue = multiprocessing.Queue()
     
+    # Create and start worker processes
+    processes = []
+    for _ in range(num_processes):
+        process = multiprocessing.Process(target=worker_function, args=(result_queue,nprods,pBoards, pComponentsTop, df_Probes, pBoards_diff))
+        process.start()
+        processes.append(process)
+        
+    # Wait for all worker processes to finish
+    for process in processes:
+        process.join()
+        
+    # Retrieve results from the result queue
+    initial_population = []
+    while not result_queue.empty():
+        chromosome = result_queue.get()
+        initial_population.append(chromosome)
+        
+    return initial_population
+
+def initialize_population_simple(npop, nprods, pBoards, pComponentsTop, df_Probes, pBoards_diff):
+    # nprods = 20
+    # nprods = np.max([len(df_PressureRods), nprods_small, nprods_large])
+    
+    # Generate random population of pressure rod designs
+    # npop = 10
+    # start_time = time.time()
+    # print(f"--- Generating population of {npop} chromosomes with {nprods*4} variables each---")
+    initial_population = [create_chromosome(nprods,pBoards,pComponentsTop,df_Probes,pBoards_diff) for _ in range(npop)] # Could this be modified to use multiprocessing? This will become very time intensive with larger populations
+    # print(f"--- Population generated in {(time.time()-start_time)/60} minutes ---")
+    return initial_population
+
 
 # %% FEA functions
 def runFEA_valid_circles(valid_circles, df_PressureRods, root, inputfile):
@@ -642,32 +732,50 @@ def centroid_distance(poly1,poly2):
 
 # %% Load data and read in the XML definition
 if __name__ == "__main__":
-    # Load previously chosen FEA path here
-    filename = 'FEApath.pk'
-    with open(filename, 'rb') as fi:
-        FEApath = pickle.load(fi)
+    # # Load previously chosen FEA path here
+    # filename = 'FEApath.pk'
+    # with open(filename, 'rb') as fi:
+    #     FEApath = pickle.load(fi)
     
-    initialdir = str(pathlib.Path(FEApath).parent) + "Examples"
-    root, inputfile = get_XML_tree(initialdir)
+    # initialdir = str(pathlib.Path(FEApath).parent) + "Examples"
+    # root, inputfile = get_XML_tree(initialdir)
     
-    print("--- Reading in UUT geometry ---")
-    # Panel
-    pBoards, _, _ = get_fixture_geometry(root, "pBoards")
-    pOutline, _, _ = get_fixture_geometry(root, "pOutline")
-    pShape, _, _ = get_fixture_geometry(root, "pShape")
-    pComponentsTop, _, _ = get_fixture_geometry(root, "pComponentsTop")
-    pComponentsBot, _, _ = get_fixture_geometry(root, "pComponentsBot")
+    # print("--- Reading in UUT geometry ---")
+    # # Panel
+    # pBoards, _, _ = get_fixture_geometry(root, "pBoards")
+    # pOutline, _, _ = get_fixture_geometry(root, "pOutline")
+    # pShape, _, _ = get_fixture_geometry(root, "pShape")
+    # pComponentsTop, _, _ = get_fixture_geometry(root, "pComponentsTop")
+    # pComponentsBot, _, _ = get_fixture_geometry(root, "pComponentsBot")
     
-    # Plates
-    Pressure, _, _ = get_fixture_geometry(root, "Pressure")
-    I_Plate, _, _ = get_fixture_geometry(root, "I_Plate")
-    Stripper, _, _ = get_fixture_geometry(root, "Stripper")
-    Probe, _, _ = get_fixture_geometry(root, "Probe")
-    Countersink, _, _ = get_fixture_geometry(root, "Countersink")
-    df_Probes = get_point_geometry(root, "Probes")
-    df_GuidePins = get_point_geometry(root, "GuidePins")
-    df_PressureRods = get_point_geometry(root, "PressureRods")
-    df_Standoffs = get_point_geometry(root, "Standoffs")
+    # # Plates
+    # Pressure, _, _ = get_fixture_geometry(root, "Pressure")
+    # I_Plate, _, _ = get_fixture_geometry(root, "I_Plate")
+    # Stripper, _, _ = get_fixture_geometry(root, "Stripper")
+    # Probe, _, _ = get_fixture_geometry(root, "Probe")
+    # Countersink, _, _ = get_fixture_geometry(root, "Countersink")
+    # df_Probes = get_point_geometry(root, "Probes")
+    # df_GuidePins = get_point_geometry(root, "GuidePins")
+    # df_PressureRods = get_point_geometry(root, "PressureRods")
+    # df_Standoffs = get_point_geometry(root, "Standoffs")
+    
+    results = get_constraint_geometry()
+    root = results[0]
+    inputfile = results[1]
+    pBoards = results[2]
+    pOutline = results[3]
+    pShape = results[4]
+    pComponentsTop = results[5]
+    pComponentsBot = results[6]
+    Pressure = results[7]
+    I_Plate = results[8]
+    Stripper = results[9]
+    Probe = results[10]
+    Countersink = results[11]
+    df_Probes = results[12]
+    df_GuidePins = results[13]
+    df_PressureRods = results[14]
+    df_Standoffs = results[15]
     
     # Estimate a number of pressure rods for the top side that would make sense
     print("--- Estimating possible pressure rods ---")
@@ -676,17 +784,24 @@ if __name__ == "__main__":
     # Choose the largest number of variables between len(df_PressureRods),
     # nprods_small, and nprods_large
     print("--- Selecting pressure rod quantity ---")
-    nprods = 100
+    nprods = 20
     # nprods = np.max([len(df_PressureRods), nprods_small, nprods_large])
     
     # Generate random population of pressure rod designs
     npop = 10
     start_time = time.time()
     print(f"--- Generating population of {npop} chromosomes with {nprods*4} variables each---")
-    chromosomes = [create_chromosome(nprods,pBoards,pComponentsTop) for _ in range(npop)] # Could this be modified to use multiprocessing? This will become very time intensive with larger populations
+    # chromosomes = [create_chromosome(nprods,pBoards,pComponentsTop,df_Probes,pBoards_diff) for _ in range(npop)] # Could this be modified to use multiprocessing? This will become very time intensive with larger populations
+    initial_population = initialize_population_simple(npop, nprods, pBoards, pComponentsTop, df_Probes, pBoards_diff)
     print(f"--- Population generated in {(time.time()-start_time)/60} minutes ---")
+    # print("--- COMPLETE ---")
     
-    print("--- COMPLETE ---")
+    # start_time = time.time()
+    # print(f"--- Generating population of {npop} chromosomes with {nprods*4} variables each---")
+    # initial_population = initialize_population_multiprocessing(npop, nprods, pBoards, pComponentsTop, df_Probes, pBoards_diff)
+    # print(f"--- Population generated in {(time.time()-start_time)/60} minutes USING MULTIPROCESSING ---")
+    
+    # print("--- COMPLETE ---")
     
     # NOTE: As of 8/12, there needs to be a function for interpreting chromosomes
     # and turning them into XML that can be run in FEA, as well as plotting
