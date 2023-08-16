@@ -529,20 +529,41 @@ def initialize_population_multiprocessing(nchromosomes, nprods, pBoards, pCompon
     return initial_population
 
 def initialize_population_simple(npop, nprods, pBoards, pComponentsTop, df_Probes, pBoards_diff):
-    # nprods = 20
-    # nprods = np.max([len(df_PressureRods), nprods_small, nprods_large])
-    
-    # Generate random population of pressure rod designs
-    # npop = 10
-    # start_time = time.time()
-    # print(f"--- Generating population of {npop} chromosomes with {nprods*4} variables each---")
     initial_population = [create_chromosome(nprods,pBoards,pComponentsTop,df_Probes,pBoards_diff) for _ in range(npop)] # Could this be modified to use multiprocessing? This will become very time intensive with larger populations
-    # print(f"--- Population generated in {(time.time()-start_time)/60} minutes ---")
     return initial_population
+
+def interpret_chromosome_to_prods(chromosome, nprods):
+    # if len(chromosome) % 4 == 0:
+    #     nprods = int(len(chromosome)/4)
+    # else:
+    #     raise ValueError("Chromosome length is not a multiple of 4")
+    
+    def interpret_rod_type_int(rod_type_int):
+        rod_types = ['Press-Fit Tapered',
+                     'Press-Fit Flat',
+                     '3.325" Tapered',
+                     '3.325" Flat']
+        return rod_types[rod_type_int]
+    
+    prods = []
+    for i in range(nprods):
+        x = chromosome[i]
+        y = chromosome[i+nprods]
+        rod_type_int = chromosome[i+2*nprods]
+        rod_type = interpret_rod_type_int(rod_type_int)
+        on = chromosome[i+3*nprods]
+        prod = PressureRod(x, y, rod_type, on)
+        prods.append(prod)
+    
+    return prods
+
+def prods_to_valid_circles(prods):
+    valid_circles = [prod.tip for prod in prods]
+    return valid_circles
 
 
 # %% FEA functions
-def runFEA_valid_circles(valid_circles, df_PressureRods, root, inputfile):
+def runFEA_valid_circles(valid_circles, df_PressureRods, root, inputfile, gen, iteration):
     # Ensure correct type is used for integer columns
     df_PressureRods['unimplemented1'] = df_PressureRods['unimplemented1'].astype(int)
     df_PressureRods['unimplemented2'] = df_PressureRods['unimplemented2'].astype(int)
@@ -615,6 +636,11 @@ def runFEA_valid_circles(valid_circles, df_PressureRods, root, inputfile):
 
     for i,val in enumerate(vals):
         rowlist[i].text = val
+    
+    # Set the salesOrder field (used in naming the output folder) to include
+    # generation and iteration numbers
+    salesOrder = root.find('.//salesOrder')
+    salesOrder.text = f"GEN{gen}ITER{iteration}"
     
     # Write the new element tree
     tree = ET.ElementTree(root)
@@ -732,33 +758,6 @@ def centroid_distance(poly1,poly2):
 
 # %% Load data and read in the XML definition
 if __name__ == "__main__":
-    # # Load previously chosen FEA path here
-    # filename = 'FEApath.pk'
-    # with open(filename, 'rb') as fi:
-    #     FEApath = pickle.load(fi)
-    
-    # initialdir = str(pathlib.Path(FEApath).parent) + "Examples"
-    # root, inputfile = get_XML_tree(initialdir)
-    
-    # print("--- Reading in UUT geometry ---")
-    # # Panel
-    # pBoards, _, _ = get_fixture_geometry(root, "pBoards")
-    # pOutline, _, _ = get_fixture_geometry(root, "pOutline")
-    # pShape, _, _ = get_fixture_geometry(root, "pShape")
-    # pComponentsTop, _, _ = get_fixture_geometry(root, "pComponentsTop")
-    # pComponentsBot, _, _ = get_fixture_geometry(root, "pComponentsBot")
-    
-    # # Plates
-    # Pressure, _, _ = get_fixture_geometry(root, "Pressure")
-    # I_Plate, _, _ = get_fixture_geometry(root, "I_Plate")
-    # Stripper, _, _ = get_fixture_geometry(root, "Stripper")
-    # Probe, _, _ = get_fixture_geometry(root, "Probe")
-    # Countersink, _, _ = get_fixture_geometry(root, "Countersink")
-    # df_Probes = get_point_geometry(root, "Probes")
-    # df_GuidePins = get_point_geometry(root, "GuidePins")
-    # df_PressureRods = get_point_geometry(root, "PressureRods")
-    # df_Standoffs = get_point_geometry(root, "Standoffs")
-    
     results = get_constraint_geometry()
     root = results[0]
     inputfile = results[1]

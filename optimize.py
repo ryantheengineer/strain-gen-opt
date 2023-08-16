@@ -15,16 +15,16 @@ import runFEA
 # MINIMIZATION
 
 # Initialize random population of parent chormosomes/solutions P
-def random_population(n_var, n_sol, lb, ub):
-    # n_var = number of variables
-    # n_sol = number of random solutions
-    # lb = lower bound
-    # ub = upper bound
-    pop = np.zeros((n_sol, n_var))
-    for i in range(n_sol):
-        pop[i,:] = np.random.uniform(lb, ub)
+# def random_population(n_var, n_sol, lb, ub):
+#     # n_var = number of variables
+#     # n_sol = number of random solutions
+#     # lb = lower bound
+#     # ub = upper bound
+#     pop = np.zeros((n_sol, n_var))
+#     for i in range(n_sol):
+#         pop[i,:] = np.random.uniform(lb, ub)
     
-    return pop
+#     return pop
 
 # On each iteration, out of 2 randomly selected parents we create 2 offsprings
 # by taking fraction of genes from one parent and remaining fraction from other parent 
@@ -89,14 +89,33 @@ def local_search(pop, n_sol, step_size, lb, ub):
     return offspring    # arr(loc_search_size x n_var)
 
 # Calculate fitness (obj function) values for each chromosome/solution
-def evaluation(pop, nobjs):
+def evaluation(pop, nobjs, gen, nprods, inputfile, constraint_geom):
     fitness_values = np.zeros((pop.shape[0], nobjs))
+    
+    # Read in constraint_geom (output of constraints.get_constraint_geometry())
+    root = constraint_geom[0]
+    inputfile = constraint_geom[1]
+    pBoards = constraint_geom[2]
+    pOutline = constraint_geom[3]
+    pShape = constraint_geom[4]
+    pComponentsTop = constraint_geom[5]
+    pComponentsBot = constraint_geom[6]
+    Pressure = constraint_geom[7]
+    I_Plate = constraint_geom[8]
+    Stripper = constraint_geom[9]
+    Probe = constraint_geom[10]
+    Countersink = constraint_geom[11]
+    df_Probes = constraint_geom[12]
+    df_GuidePins = constraint_geom[13]
+    df_PressureRods = constraint_geom[14]
+    df_Standoffs = constraint_geom[15]
     
     for i,chromosome in enumerate(pop):
         
         # FIXME: Need code to translate chromosomes into designs, then run FEA
-        
-        strain_xx, strain_yy, strain_xy, principalStrain_min, principalStrain_max = runFEA.getFitness(dfmesh)
+        prods = constraints.interpret_chromosome_to_prods(chromosome, nprods)
+        valid_circles = constraints.prods_to_valid_circles(prods)
+        strain_xx, strain_yy, strain_xy, principalStrain_min, principalStrain_max = constraints.runFEA_valid_circles(valid_circles, df_PressureRods, root, inputfile, gen, i)
         
         fitness_values[i,0] = strain_xx
         fitness_values[i,1] = strain_yy
@@ -223,17 +242,20 @@ def main_optimization():
     
     # Parameters
     # n_var = 3                   # chromosome has 3 coordinates/genes
-    lb = [-5, -5, -5]
-    ub = [5, 5, 5]
-    pop_size = 150              # initial number of chromosomes
+    # lb = [-5, -5, -5]
+    # ub = [5, 5, 5]
+    pop_size = 20              # initial number of chromosomes
     rate_crossover = 20         # number of chromosomes that we apply crossover to
     rate_mutation = 20          # number of chromosomes that we apply mutation to
     rate_local_search = 10      # number of chromosomes that we apply local_search to
     step_size = 0.1             # coordinate displacement during local_search
     maximum_generation = 100    # number of iterations
     
-    nprods = 20
+    nprods = 10
+    # nprods = np.max([len(df_PressureRods), nprods_small, nprods_large])
     pop = constraints.initialize_population_simple(pop_size, nprods, pBoards, pComponentsTop, df_Probes, pBoards_diff)    # initial parents population P
+    
+    pop = np.asarray(pop)
     
     best_fitnesses_1 = []
     best_fitnesses_2 = []
