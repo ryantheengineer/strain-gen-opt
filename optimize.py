@@ -28,21 +28,38 @@ import runFEA
 
 # On each iteration, out of 2 randomly selected parents we create 2 offsprings
 # by taking fraction of genes from one parent and remaining fraction from other parent 
-def crossover(pop, crossover_rate):
+def crossover(pop, crossover_rate, nprods, top_constraints):
     offspring = np.zeros((crossover_rate, pop.shape[1]))
-    for i in range(int(crossover_rate/2)):
-        r1 = np.random.randint(0, pop.shape[0])
-        r2 = np.random.randint(0, pop.shape[0])
-        while r1 == r2:
+    for i in range(crossover_rate):
+        attempt_count = 0
+        while True:
+            
+            # FIXME: The classical crossover method doesn't work because it's
+            # too easy to make an invalid offspring. Look into making a new
+            # crossover that switches a pair of pressure rods, rather than a
+            # whole section of pressure rod parameters. Think of it in terms
+            # of a complete position, the rod type, and whether the rod is
+            # "on/off" as the things that can be varied.
+            
+            
             r1 = np.random.randint(0, pop.shape[0])
             r2 = np.random.randint(0, pop.shape[0])
-        cutting_point = np.random.randint(1, pop.shape[1])
-        offspring[2*i, 0:cutting_point] = pop[r1, 0:cutting_point]
-        offspring[2*i, cutting_point:] = pop[r2, cutting_point:]
-        offspring[2*i+1, 0:cutting_point] = pop[r2, 0:cutting_point]
-        offspring[2*i+1, cutting_point:] = pop[r1, cutting_point:]
-        
-        # FIXME: ADD VERIFICATION HERE THAT THE OFFSPRING ARE VALID DESIGNS
+            while r1 == r2:
+                r1 = np.random.randint(0, pop.shape[0])
+                r2 = np.random.randint(0, pop.shape[0])
+            cutting_point = np.random.randint(1, pop.shape[1])
+            offspring[i, 0:cutting_point] = pop[r1, 0:cutting_point]
+            offspring[i, cutting_point:] = pop[r2, cutting_point:]
+            
+            # Validate each pressure rod in the chromosome
+            offspring_prods = constraints.interpret_chromosome_to_prods(list(offspring[i]), nprods)
+            valid = constraints.validate_prods(offspring_prods, top_constraints)
+            if valid == True:
+                print(f"\n VALID CROSSOVER! after {attempt_count} tries")
+                break
+            else:
+                print(f"trying crossover again: {attempt_count} tries")
+                attempt_count += 1
         
     return offspring    # arr(crossover_size x n_var)
 
@@ -217,42 +234,47 @@ def selection(pop, fitness_values, pop_size):
 
 def main_optimization():
     # Initial setup
-    results = constraints.get_constraint_geometry()
-    root = results[0]
-    inputfile = results[1]
-    pBoards = results[2]
-    pOutline = results[3]
-    pShape = results[4]
-    pComponentsTop = results[5]
-    pComponentsBot = results[6]
-    Pressure = results[7]
-    I_Plate = results[8]
-    Stripper = results[9]
-    Probe = results[10]
-    Countersink = results[11]
-    df_Probes = results[12]
-    df_GuidePins = results[13]
-    df_PressureRods = results[14]
-    df_Standoffs = results[15]
+    print("Initial setup - reading in constraints")
+    constraint_geom = constraints.get_constraint_geometry()
+    root = constraint_geom[0]
+    inputfile = constraint_geom[1]
+    pBoards = constraint_geom[2]
+    pOutline = constraint_geom[3]
+    pShape = constraint_geom[4]
+    pComponentsTop = constraint_geom[5]
+    pComponentsBot = constraint_geom[6]
+    Pressure = constraint_geom[7]
+    I_Plate = constraint_geom[8]
+    Stripper = constraint_geom[9]
+    Probe = constraint_geom[10]
+    Countersink = constraint_geom[11]
+    df_Probes = constraint_geom[12]
+    df_GuidePins = constraint_geom[13]
+    df_PressureRods = constraint_geom[14]
+    df_Standoffs = constraint_geom[15]
     
     # Estimate a number of pressure rods for the top side that would make sense
     # print("--- Estimating possible pressure rods ---")
     nprods_small, nprods_large, pBoards_diff = constraints.grid_nprods(pBoards,pComponentsTop)
     
+    top_constraints = constraints.get_top_constraints(pBoards, pComponentsTop, df_Probes, pBoards_diff)
     
     # Parameters
     # n_var = 3                   # chromosome has 3 coordinates/genes
     # lb = [-5, -5, -5]
     # ub = [5, 5, 5]
+    print("Setting genetic algorithm parameters")
     pop_size = 20              # initial number of chromosomes
     rate_crossover = 20         # number of chromosomes that we apply crossover to
     rate_mutation = 20          # number of chromosomes that we apply mutation to
     rate_local_search = 10      # number of chromosomes that we apply local_search to
     step_size = 0.1             # coordinate displacement during local_search
-    maximum_generation = 100    # number of iterations
+    maximum_generation = 10    # number of iterations
+    nobjs = 5
     
     nprods = 10
     # nprods = np.max([len(df_PressureRods), nprods_small, nprods_large])
+    print("Initializing initial random population")
     pop = constraints.initialize_population_simple(pop_size, nprods, pBoards, pComponentsTop, df_Probes, pBoards_diff)    # initial parents population P
     
     pop = np.asarray(pop)
@@ -261,17 +283,17 @@ def main_optimization():
     best_fitnesses_2 = []
     # NSGA-II main loop
     for i in range(maximum_generation):
-        offspring_from_crossover = crossover(pop, rate_crossover)
-        offspring_from_mutation = mutation(pop, rate_mutation)
+        offspring_from_crossover = crossover(pop, rate_crossover, nprods, top_constraints)
+        # offspring_from_mutation = mutation(pop, rate_mutation)
         # offspring_from_local_search = local_search(pop, rate_local_search, step_size)
         
         # we append children Q (cross-overs, mutations, local search) to paraents P
         # having parents in the mix, i.e. allowing for parents to progress to next iteration - Elitism
         pop = np.append(pop, offspring_from_crossover, axis=0)
-        pop = np.append(pop, offspring_from_mutation, axis=0)
+        # pop = np.append(pop, offspring_from_mutation, axis=0)
         # pop = np.append(pop, offspring_from_local_search, axis=0)
         print(pop.shape)
-        fitness_values = evaluation(pop)
+        fitness_values = evaluation(pop, nobjs, i, nprods, inputfile, constraint_geom)
         j = fitness_values[:,0].argmin()
         best_fitnesses_1.append(fitness_values[j,:])
         j = fitness_values[:,1].argmin()

@@ -498,12 +498,93 @@ def create_chromosome(nprods, pBoards, pComponentsTop, df_Probes, pBoards_diff):
     chromosome.extend(chromosome_on)
 
     return chromosome
+
+# def validate_chromosome(chromosome, nprods, top_constraints):
+#     prods = interpret_chromosome_to_prods(chromosome, nprods)
+#     pBoards_multi = top_constraints[0]
+#     top_probes = top_constraints[1]
+#     topcomponents = top_constraints[2]
+#     xmin, ymin, xmax, ymax = pBoards_multi.bounds
+
+def get_top_constraints(pBoards, pComponentsTop, df_Probes, pBoards_diff):
+    pBoards_multi = MultiPolygon(pBoards_diff)
+    
+    df_Probes_top = df_Probes[df_Probes["side"]==1]
+    df_Probes_top.reset_index(inplace=True)
+    top_probes = []
+    for i,row in df_Probes_top.iterrows():
+        top_probes.append(place_circle(row.x, row.y, row.diameter/2))
+        
+    top_probes = unary_union(top_probes)
+    if top_probes.geom_type != "MultiPolygon":
+        top_probes = MultiPolygon(top_probes)
+    
+    topcomponents = []
+    for inner in pComponentsTop:
+        topcomponents.append(inner)
+    
+    topcomponents = unary_union(topcomponents)
+    if topcomponents.geom_type != "MultiPolygon":
+        topcomponents = MultiPolygon(topcomponents)
+    
+    top_constraints = (pBoards_multi, top_probes, topcomponents)
+    return top_constraints
+    
+    
+def validate_prod(prod, prods_chosen, top_constraints):
+    # Validate a single pressure rod for the top side
+    pBoards_multi = top_constraints[0]
+    top_probes = top_constraints[1]
+    topcomponents = top_constraints[2]
+    xmin, ymin, xmax, ymax = pBoards_multi.bounds
+    
+    valid = True
+    # x = random.uniform(xmin,xmax)
+    # y = random.uniform(ymin,ymax)
+    # rod_type_i = random.randint(0,3)
+    # on = random.randint(0,1)
+    # prod = PressureRod(x,y,rod_types[rod_type_i],on)
+    while True:
+        # Make sure pressure rod is within the UUT and make sure it doesn't intersect any components, using the appropriate buffer sizes
+        if not prod.tip_UUT_buffer.within(pBoards_multi):
+            valid = False
+            break
+        if prod.tip_component_buffer.intersects(topcomponents):
+            valid = False
+            break
+        
+        # Make sure the pressure rod isn't too close to any top probes
+        if prod.tip_from_top_probe_buffer.intersects(top_probes):
+            valid = False
+            break
             
+        # Make sure pressure rod doesn't conflict with any previously-placed pressure rods
+        for prod_chosen in prods_chosen:
+            dist = centroid_distance(prod.tip,prod_chosen.tip)
+            if dist < prod.ctc:
+                valid = False
+                break
+        if valid == False:
+            break
+        
+        if valid == True:
+            break
+            
+    return valid
+
+def validate_prods(prods_chosen, top_constraints):
+    for prod in prods_chosen:
+        valid = validate_prod(prod, prods_chosen, top_constraints)
+        if valid == False:
+            break
+    return valid
+
 
 def worker_function(result_queue,nprods,pBoards, pComponentsTop, df_Probes, pBoards_diff):
     while True:
         chromosome = create_chromosome(nprods, pBoards, pComponentsTop, df_Probes, pBoards_diff)
         result_queue.put(chromosome)
+
         
 def initialize_population_multiprocessing(nchromosomes, nprods, pBoards, pComponentsTop, df_Probes, pBoards_diff):
     num_processes = multiprocessing.cpu_count()  # Number of available CPU cores
@@ -533,10 +614,6 @@ def initialize_population_simple(npop, nprods, pBoards, pComponentsTop, df_Probe
     return initial_population
 
 def interpret_chromosome_to_prods(chromosome, nprods):
-    # if len(chromosome) % 4 == 0:
-    #     nprods = int(len(chromosome)/4)
-    # else:
-    #     raise ValueError("Chromosome length is not a multiple of 4")
     
     def interpret_rod_type_int(rod_type_int):
         rod_types = ['Press-Fit Tapered',
@@ -549,7 +626,7 @@ def interpret_chromosome_to_prods(chromosome, nprods):
     for i in range(nprods):
         x = chromosome[i]
         y = chromosome[i+nprods]
-        rod_type_int = chromosome[i+2*nprods]
+        rod_type_int = int(chromosome[i+2*nprods])
         rod_type = interpret_rod_type_int(rod_type_int)
         on = chromosome[i+3*nprods]
         prod = PressureRod(x, y, rod_type, on)
