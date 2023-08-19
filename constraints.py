@@ -544,7 +544,7 @@ def validate_prod(prod, prods_chosen, top_constraints):
     # rod_type_i = random.randint(0,3)
     # on = random.randint(0,1)
     # prod = PressureRod(x,y,rod_types[rod_type_i],on)
-    while True:
+    while True:        
         # Make sure pressure rod is within the UUT and make sure it doesn't intersect any components, using the appropriate buffer sizes
         if not prod.tip_UUT_buffer.within(pBoards_multi):
             valid = False
@@ -556,6 +556,11 @@ def validate_prod(prod, prods_chosen, top_constraints):
         # Make sure the pressure rod isn't too close to any top probes
         if prod.tip_from_top_probe_buffer.intersects(top_probes):
             valid = False
+            break
+
+        # If the pressure rod is turned off, it's automatically valid
+        if prod.on == 0:
+            valid = True
             break
             
         # Make sure pressure rod doesn't conflict with any previously-placed pressure rods

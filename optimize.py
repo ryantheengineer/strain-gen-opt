@@ -28,40 +28,125 @@ import runFEA
 
 # On each iteration, out of 2 randomly selected parents we create 2 offsprings
 # by taking fraction of genes from one parent and remaining fraction from other parent 
-def crossover(pop, crossover_rate, nprods, top_constraints):
+def crossover_prods(pop, crossover_rate, nprods, top_constraints):
     offspring = np.zeros((crossover_rate, pop.shape[1]))
     for i in range(crossover_rate):
-        attempt_count = 0
-        while True:
-            
-            # FIXME: The classical crossover method doesn't work because it's
-            # too easy to make an invalid offspring. Look into making a new
-            # crossover that switches a pair of pressure rods, rather than a
-            # whole section of pressure rod parameters. Think of it in terms
-            # of a complete position, the rod type, and whether the rod is
-            # "on/off" as the things that can be varied.
-            
-            
+        # Crossover with complete pressure rods.
+        complete = False
+        while complete is False:
+            # Get parents
             r1 = np.random.randint(0, pop.shape[0])
             r2 = np.random.randint(0, pop.shape[0])
             while r1 == r2:
                 r1 = np.random.randint(0, pop.shape[0])
                 r2 = np.random.randint(0, pop.shape[0])
-            cutting_point = np.random.randint(1, pop.shape[1])
-            offspring[i, 0:cutting_point] = pop[r1, 0:cutting_point]
-            offspring[i, cutting_point:] = pop[r2, cutting_point:]
+            parent1 = pop[r1]
+            parent2 = pop[r2]
             
-            # Validate each pressure rod in the chromosome
-            offspring_prods = constraints.interpret_chromosome_to_prods(list(offspring[i]), nprods)
-            valid = constraints.validate_prods(offspring_prods, top_constraints)
-            if valid == True:
-                print(f"\n VALID CROSSOVER! after {attempt_count} tries")
-                break
-            else:
-                print(f"trying crossover again: {attempt_count} tries")
-                attempt_count += 1
+            # Interpret each parent into PressureRod representation
+            parent1_prods = constraints.interpret_chromosome_to_prods(parent1, nprods)
+            parent2_prods = constraints.interpret_chromosome_to_prods(parent2, nprods)
+            
+            # Perform crossover on PressureRod representation
+            goal_crossed = np.random.randint(1, nprods) # Desired number of prods to cross
+            actual_crossed = 0
+            j = 0
+            child_prods = parent1.copy()
+            while actual_crossed <= goal_crossed:
+                # Unlike a cutting point crossover, use the number goal_crossed
+                # to attempt to cross pressure rods. If something doesn't work, try
+                # changing the pressure rod type to see if it fits. If none of
+                # those combinations work, move on to the next gene. If no genes
+                # can be exchanged, start another loop that 
+                
+                # Handle the case where not as many pressure rods could be
+                # traded from parent chromosomes
+                if j == len(child_prods):
+                    if actual_crossed > 0:
+                        complete = True
+                        
+                        ######### Send the child_prods to be added to the offspring
+                        break
+                    else:
+                        ######## Send the whole process back through the outermost
+                        ######## while loop and try again with two new parents, without
+                        ######## adding any children to the list of offspring chromosomes
+                        pass
+                
+                # Replace chromosome j in the child (starting as identical to 
+                # parent 1) with chromosome j from parent 2
+                child_prods[j] = parent2[j]
+                # Validate the current version of the child
+                valid = constraints.validate_prods(child_prods, top_constraints)
+                if valid:
+                    actual_crossed += 1
+                    j += 1
+                    continue
+                else:
+                    x = child_prods[j].x
+                    y = child_prods[j].y
+                    rod_types = ['Press-Fit Tapered',
+                                  'Press-Fit Flat',
+                                  '3.325" Tapered',
+                                  '3.325" Flat']
+                    on = child_prods[j].on
+                    for rod_type in rod_types:
+                        child_prods[j].update_pressure_rod(x, y, rod_type, on)
+                        valid = constraints.validate_prods(child_prods, top_constraints)
+                        if valid:
+                            actual_crossed += 1
+                            j += 1
+                            break
+                    if not valid:
+                        child_prods[j] = parent1[j]
+                        j += 1
+                        continue
+                    
+            
+            # offspring[i, 0:cutting_point] = parent1_prods[0:cutting_point]
+            # offspring[i, cutting_point:] = parent2_prods[cutting_point:]
         
-    return offspring    # arr(crossover_size x n_var)
+    # Check to make sure no two offspring are identical. If there are any, cull them
+
+
+
+
+
+
+# def crossover(pop, crossover_rate, nprods, top_constraints):
+#     offspring = np.zeros((crossover_rate, pop.shape[1]))
+#     for i in range(crossover_rate):
+#         attempt_count = 0
+#         while True:
+            
+#             # FIXME: The classical crossover method doesn't work because it's
+#             # too easy to make an invalid offspring. Look into making a new
+#             # crossover that switches a pair of pressure rods, rather than a
+#             # whole section of pressure rod parameters. Think of it in terms
+#             # of a complete position, the rod type, and whether the rod is
+#             # "on/off" as the things that can be varied.
+            
+            
+#             r1 = np.random.randint(0, pop.shape[0])
+#             r2 = np.random.randint(0, pop.shape[0])
+#             while r1 == r2:
+#                 r1 = np.random.randint(0, pop.shape[0])
+#                 r2 = np.random.randint(0, pop.shape[0])
+#             cutting_point = np.random.randint(1, pop.shape[1])
+#             offspring[i, 0:cutting_point] = pop[r1, 0:cutting_point]
+#             offspring[i, cutting_point:] = pop[r2, cutting_point:]
+            
+#             # Validate each pressure rod in the chromosome
+#             offspring_prods = constraints.interpret_chromosome_to_prods(list(offspring[i]), nprods)
+#             valid = constraints.validate_prods(offspring_prods, top_constraints)
+#             if valid == True:
+#                 print(f"\n VALID CROSSOVER! after {attempt_count} tries")
+#                 break
+#             else:
+#                 print(f"trying crossover again: {attempt_count} tries")
+#                 attempt_count += 1
+        
+#     return offspring    # arr(crossover_size x n_var)
 
 # On each iteration, out of 2 randomly selected parents we create 2 offsprings
 # by excahging some amount of genes/coordinates between parents
@@ -283,7 +368,7 @@ def main_optimization():
     best_fitnesses_2 = []
     # NSGA-II main loop
     for i in range(maximum_generation):
-        offspring_from_crossover = crossover(pop, rate_crossover, nprods, top_constraints)
+        offspring_from_crossover = crossover_prods(pop, rate_crossover, nprods, top_constraints)
         # offspring_from_mutation = mutation(pop, rate_mutation)
         # offspring_from_local_search = local_search(pop, rate_local_search, step_size)
         
