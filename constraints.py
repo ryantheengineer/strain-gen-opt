@@ -529,6 +529,56 @@ def get_top_constraints(pBoards, pComponentsTop, df_Probes, pBoards_diff):
     
     top_constraints = (pBoards_multi, top_probes, topcomponents)
     return top_constraints
+
+def plot_prods_top_constraints(prods, top_constraints, title):
+    # Quick plot to visually check designs as they are produced by crossover
+    # or other relevant functions
+    fig, ax = plt.subplots(dpi=300, figsize=(10,8))
+    ax.set_aspect('equal')
+    
+    # UUT boundaries
+    color = 'k'
+    linestyle = '-'
+    label = "UUT"
+    plot_multipolygon_w_holes(top_constraints[0], fig, ax, color, linestyle, label)
+    
+    # Top probes
+    color = 'b'
+    label = "Top Probes"
+    plot_multipolygon_w_holes(top_constraints[1], fig, ax, color, linestyle, label)
+    
+    # Top components
+    color = 'purple'
+    label = "Top Components"
+    plot_multipolygon_w_holes(top_constraints[2], fig, ax, color, linestyle, label)
+    
+    # "On" pressure rods with offsets
+    prods_poly_list_on = [prod.tip for prod in prods if prod.on]
+    prods_tip_component_buffer_on = [prod.tip_component_buffer for prod in prods if prod.on]
+    prods_tip_UUT_buffer_on = [prod.tip_UUT_buffer for prod in prods if prod.on]
+    prods_tip_from_top_probe_buffer_on = [prod.tip_from_top_probe_buffer for prod in prods if prod.on]
+    linestyle = '-'
+    label = "Pressure Rods - On"
+    plot_poly_list_w_holes(prods_poly_list_on, fig, ax, 'g', linestyle, label)
+    plot_poly_list_w_holes(prods_tip_UUT_buffer_on, fig, ax, 'lime', linestyle, label)
+    plot_poly_list_w_holes(prods_tip_component_buffer_on, fig, ax, 'turquoise', linestyle, label)
+    plot_poly_list_w_holes(prods_tip_from_top_probe_buffer_on, fig, ax, 'teal', linestyle, label)
+    
+    # "Off pressure rods with offsets
+    prods_poly_list_off = [prod.tip for prod in prods if not prod.on]
+    prods_tip_component_buffer_off = [prod.tip_component_buffer for prod in prods if not prod.on]
+    prods_tip_UUT_buffer_off = [prod.tip_UUT_buffer for prod in prods if not prod.on]
+    prods_tip_from_top_probe_buffer_off = [prod.tip_from_top_probe_buffer for prod in prods if not prod.on]
+    
+    linestyle = '-'
+    label = "Pressure Rods - Off"
+    plot_poly_list_w_holes(prods_poly_list_off, fig, ax, 'r', linestyle, label)
+    plot_poly_list_w_holes(prods_tip_UUT_buffer_off, fig, ax, 'yellow', linestyle, label)
+    plot_poly_list_w_holes(prods_tip_component_buffer_off, fig, ax, 'gold', linestyle, label)
+    plot_poly_list_w_holes(prods_tip_from_top_probe_buffer_off, fig, ax, 'darkorange', linestyle, label)
+    
+    fig.suptitle(title)
+    
     
     
 def validate_prod(prod, prods_chosen, top_constraints):
@@ -772,6 +822,22 @@ def plot_poly_list_w_holes(poly_list, fig, ax, color, linestyle, label):
                     ax.plot(xi, yi, color=color, linestyle=linestyle, linewidth=0.5)            
         else:
             raise IOError("Shape is not a polygon")
+            
+def plot_multipolygon_w_holes(multipoly, fig, ax, color, linestyle, label):
+    first = True
+    if multipoly.geom_type == "MultiPolygon":
+        for geom in multipoly.geoms:
+            xe, ye = geom.exterior.xy
+            if first == True:
+                ax.plot(xe, ye, color=color, label=label, linestyle=linestyle, linewidth=0.5)
+                first = False
+            else:
+                ax.plot(xe, ye, color=color, linestyle=linestyle, linewidth=0.5)
+            for inner in geom.interiors:
+                xi, yi = zip(*inner.coords[:])
+                ax.plot(xi, yi, color=color, linestyle=linestyle, linewidth=0.5)            
+    else:
+        raise IOError("Shape is not a multipolygon")
             
 def plot_probes_guidepins(df, fig, ax, linestyle, identifier):
     first = True

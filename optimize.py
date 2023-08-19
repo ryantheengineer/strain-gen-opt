@@ -51,7 +51,7 @@ def crossover_prods(pop, crossover_rate, nprods, top_constraints):
             goal_crossed = np.random.randint(1, nprods) # Desired number of prods to cross
             actual_crossed = 0
             j = 0
-            child_prods = parent1.copy()
+            child_prods = parent1_prods.copy()
             while actual_crossed <= goal_crossed:
                 # Unlike a cutting point crossover, use the number goal_crossed
                 # to attempt to cross pressure rods. If something doesn't work, try
@@ -71,11 +71,11 @@ def crossover_prods(pop, crossover_rate, nprods, top_constraints):
                         ######## Send the whole process back through the outermost
                         ######## while loop and try again with two new parents, without
                         ######## adding any children to the list of offspring chromosomes
-                        pass
+                        continue
                 
                 # Replace chromosome j in the child (starting as identical to 
                 # parent 1) with chromosome j from parent 2
-                child_prods[j] = parent2[j]
+                child_prods[j] = parent2_prods[j]
                 # Validate the current version of the child
                 valid = constraints.validate_prods(child_prods, top_constraints)
                 if valid:
@@ -98,7 +98,7 @@ def crossover_prods(pop, crossover_rate, nprods, top_constraints):
                             j += 1
                             break
                     if not valid:
-                        child_prods[j] = parent1[j]
+                        child_prods[j] = parent1_prods[j]
                         j += 1
                         continue
                     
