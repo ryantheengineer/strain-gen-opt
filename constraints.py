@@ -689,8 +689,37 @@ def interpret_chromosome_to_prods(chromosome, nprods):
     
     return prods
 
+def interpret_prods_to_chromosome(prods):
+    
+    def interpret_rod_type(rod_type):
+        rod_types = ['Press-Fit Tapered',
+                     'Press-Fit Flat',
+                     '3.325" Tapered',
+                     '3.325" Flat']
+        
+        return rod_types.index(rod_type)
+        
+    chromosome_x = []
+    chromosome_y = []
+    chromosome_rod_type = []
+    chromosome_on = []
+    for prod in prods:
+        chromosome_x.append(prod.x)
+        chromosome_y.append(prod.y)
+        chromosome_rod_type.append(interpret_rod_type(prod.rod_type))
+        chromosome_on.append(prod.on)
+            
+    chromosome = []
+    chromosome.extend(chromosome_x)
+    chromosome.extend(chromosome_y)
+    chromosome.extend(chromosome_rod_type)
+    chromosome.extend(chromosome_on)
+    
+    return chromosome
+    
+
 def prods_to_valid_circles(prods):
-    valid_circles = [prod.tip for prod in prods]
+    valid_circles = [prod.tip for prod in prods if prod.on]
     return valid_circles
 
 
