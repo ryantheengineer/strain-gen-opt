@@ -89,11 +89,11 @@ def crossover_prods(pop, crossover_rate, nprods, top_constraints):
         child_chromosome = constraints.interpret_prods_to_chromosome(child_prods)
         offspring[i, :] = child_chromosome
         
-        # # Plot the parent and child designs for examination
-        # constraints.plot_prods_top_constraints(parent1_prods, top_constraints, f"Offspring {i}: Parent 1")
-        # constraints.plot_prods_top_constraints(parent2_prods, top_constraints, f"Offspring {i}: Parent 2")
-        # constraints.plot_prods_top_constraints(child_prods, top_constraints, f"Offspring {i}: Child")
-        # plt.show()
+        # Plot the parent and child designs for examination
+        constraints.plot_prods_top_constraints(parent1_prods, top_constraints, f"Offspring {i}: Parent 1")
+        constraints.plot_prods_top_constraints(parent2_prods, top_constraints, f"Offspring {i}: Parent 2")
+        constraints.plot_prods_top_constraints(child_prods, top_constraints, f"Offspring {i}: Child")
+        plt.show()
         
     return offspring
             
@@ -406,12 +406,12 @@ def main_optimization():
     # lb = [-5, -5, -5]
     # ub = [5, 5, 5]
     print("Setting genetic algorithm parameters")
-    pop_size = 20              # initial number of chromosomes
-    rate_crossover = 10         # number of chromosomes that we apply crossover to
+    pop_size = 10              # initial number of chromosomes
+    rate_crossover = 5         # number of chromosomes that we apply crossover to
     rate_mutation = 20          # number of chromosomes that we apply mutation to
     rate_local_search = 10      # number of chromosomes that we apply local_search to
     step_size = 0.1             # coordinate displacement during local_search
-    maximum_generation = 30    # number of iterations
+    maximum_generation = 5    # number of iterations
     nobjs = 2
     
     nprods = 16
@@ -447,8 +447,10 @@ def main_optimization():
         print('Generation:', i)
         fig,ax = plt.subplots(dpi=300)
         for j in range(len(pop)):
-            x1 = pop[j][0]
-            x2 = pop[j][1]
+            x1 = fitness_values[j][0]
+            x2 = fitness_values[j][1]
+            # x1 = pop[j][0]
+            # x2 = pop[j][1]
             ax.scatter(x1,x2,marker='o',color='b')
         ax.set_xlabel('x1')
         ax.set_ylabel('x2')
@@ -470,7 +472,7 @@ def main_optimization():
         # ax.set_title(f"Generation: {i}")
     
     # Pareto front visualization
-    fitness_values = evaluation(pop)
+    fitness_values = evaluation(pop, nobjs, i, nprods, inputfile, constraint_geom)
     index = np.arange(pop.shape[0]).astype(int)
     pareto_front_index = pareto_front_finding(fitness_values, index)
     pop = pop[pareto_front_index, :]
