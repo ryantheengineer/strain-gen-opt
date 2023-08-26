@@ -5,7 +5,7 @@ Created on Mon Aug 14 22:14:37 2023
 @author: Ryan Larson
 """
 
-import random as rn
+import random
 import numpy as np
 import matplotlib.pyplot as plt
 import math
@@ -96,130 +96,137 @@ def crossover_prods(pop, crossover_rate, nprods, top_constraints):
         plt.show()
         
     return offspring
-            
-            # # Perform crossover on PressureRod representation
-            # goal_crossed = np.random.randint(1, nprods) # Desired number of prods to cross
-            # actual_crossed = 0
-            # j = 0
-            # child_prods = parent1_prods.copy()
-            # while actual_crossed <= goal_crossed:
-            #     # Unlike a cutting point crossover, use the number goal_crossed
-            #     # to attempt to cross pressure rods. If something doesn't work, try
-            #     # changing the pressure rod type to see if it fits. If none of
-            #     # those combinations work, move on to the next gene. If no genes
-            #     # can be exchanged, start another loop that 
-                
-            #     # Handle the case where not as many pressure rods could be
-            #     # traded from parent chromosomes
-            #     if j == len(child_prods):
-            #         if actual_crossed > 0:
-            #             complete = True
-                        
-            #             ######### Send the child_prods to be added to the offspring
-            #             break
-            #         else:
-            #             ######## Send the whole process back through the outermost
-            #             ######## while loop and try again with two new parents, without
-            #             ######## adding any children to the list of offspring chromosomes
-            #             continue
-                
-            #     # Replace chromosome j in the child (starting as identical to 
-            #     # parent 1) with chromosome j from parent 2
-            #     child_prods[j] = parent2_prods[j]
-            #     # Validate the current version of the child
-                
-                
-                
-                # valid = constraints.validate_prods(child_prods, top_constraints)
-                # if valid:
-                #     actual_crossed += 1
-                #     j += 1
-                #     continue
-                # else:
-                #     x = child_prods[j].x
-                #     y = child_prods[j].y
-                #     rod_types = ['Press-Fit Tapered',
-                #                   'Press-Fit Flat',
-                #                   '3.325" Tapered',
-                #                   '3.325" Flat']
-                #     on = child_prods[j].on
-                #     for rod_type in rod_types:
-                #         child_prods[j].update_pressure_rod(x, y, rod_type, on)
-                #         valid = constraints.validate_prods(child_prods, top_constraints)
-                #         if valid:
-                #             actual_crossed += 1
-                #             j += 1
-                #             break
-                #     if not valid:
-                #         child_prods[j] = parent1_prods[j]
-                #         j += 1
-                #         continue
-                    
-            
-            # offspring[i, 0:cutting_point] = parent1_prods[0:cutting_point]
-            # offspring[i, cutting_point:] = parent2_prods[cutting_point:]
-        
-    # Check to make sure no two offspring are identical. If there are any, cull them
 
 
-
-
-
-
-# def crossover(pop, crossover_rate, nprods, top_constraints):
-#     offspring = np.zeros((crossover_rate, pop.shape[1]))
-#     for i in range(crossover_rate):
-#         attempt_count = 0
-#         while True:
-            
-#             # FIXME: The classical crossover method doesn't work because it's
-#             # too easy to make an invalid offspring. Look into making a new
-#             # crossover that switches a pair of pressure rods, rather than a
-#             # whole section of pressure rod parameters. Think of it in terms
-#             # of a complete position, the rod type, and whether the rod is
-#             # "on/off" as the things that can be varied.
-            
-            
-#             r1 = np.random.randint(0, pop.shape[0])
-#             r2 = np.random.randint(0, pop.shape[0])
-#             while r1 == r2:
-#                 r1 = np.random.randint(0, pop.shape[0])
-#                 r2 = np.random.randint(0, pop.shape[0])
-#             cutting_point = np.random.randint(1, pop.shape[1])
-#             offspring[i, 0:cutting_point] = pop[r1, 0:cutting_point]
-#             offspring[i, cutting_point:] = pop[r2, cutting_point:]
-            
-#             # Validate each pressure rod in the chromosome
-#             offspring_prods = constraints.interpret_chromosome_to_prods(list(offspring[i]), nprods)
-#             valid = constraints.validate_prods(offspring_prods, top_constraints)
-#             if valid == True:
-#                 print(f"\n VALID CROSSOVER! after {attempt_count} tries")
-#                 break
-#             else:
-#                 print(f"trying crossover again: {attempt_count} tries")
-#                 attempt_count += 1
-        
-#     return offspring    # arr(crossover_size x n_var)
-
-# On each iteration, out of 2 randomly selected parents we create 2 offsprings
-# by excahging some amount of genes/coordinates between parents
-def mutation(pop, mutation_rate):
-    offspring = np.zeros((mutation_rate, pop.shape[1]))
-    for i in range(int(mutation_rate/2)):
-        r1 = np.random.randint(0, pop.shape[0])
-        r2 = np.random.randint(0, pop.shape[0])
-        while r1 == r2:
+# Perform crossover with mutation
+def mutation(pop, n_mutated, mutation_rate, nprods, top_constraints):
+    print("Entering mutation phase...creating children from crossover")
+    offspring = np.zeros((n_mutated, pop.shape[1]))
+    for i in range(n_mutated):
+        # Crossover with complete pressure rods.
+        complete = False
+        while complete is False:
+            # Get parents
             r1 = np.random.randint(0, pop.shape[0])
             r2 = np.random.randint(0, pop.shape[0])
-        # We select only one gene/coordinate per chromosomes/solution for mutation here.
-        # For binary solutions, number of genes for mutation can be arbitrary
-        cutting_point = np.random.randint(0, pop.shape[1])
-        offspring[2*i] = pop[r1]
-        offspring[2*i, cutting_point] = pop[r2, cutting_point]
-        offspring[2*i+1] = pop[r2]
-        offspring[2*i+1, cutting_point] = pop[r1, cutting_point]
+            while r1 == r2:
+                r1 = np.random.randint(0, pop.shape[0])
+                r2 = np.random.randint(0, pop.shape[0])
+            parent1 = pop[r1]
+            parent2 = pop[r2]
+            
+            # Interpret each parent into PressureRod representation
+            parent1_prods = constraints.interpret_chromosome_to_prods(parent1, nprods)
+            parent2_prods = constraints.interpret_chromosome_to_prods(parent2, nprods)
+            
+            # Perform crossover on PressureRod representation, with the understanding
+            # that both parents were previously validated against all constraints,
+            # so the only way crossed genes in a child can be invalid is if pressure
+            # rods are too close together.
+            child_prods = parent1_prods.copy()
+            
+            crossover_point = np.random.randint(1, nprods)
+            
+            for j in range(0, crossover_point):
+                # Get gene at position j from parent 2
+                child_prods[j] = parent2_prods[j]
+                
+                # Check if the current potentially crossed gene violates any
+                # other genes, and if so, replace that gene instead of gene j
+                n_violated = 0
+                idx_violated = []
+                for k,prod in enumerate(child_prods):
+                    if k == j:
+                        continue
+                    dist = constraints.centroid_distance(child_prods[j].tip, prod.tip)
+                    if dist < prod.ctc:
+                        n_violated += 1
+                        idx_violated.append(k)
+                if n_violated == 0:
+                    continue
+                elif n_violated == 1:
+                    child_prods[j] = parent1_prods[j]
+                    child_prods[idx_violated[0]] = parent2_prods[j]
+                else:
+                    continue
+            
+            # Mutate prod form of child
+            rod_types = ['Press-Fit Tapered',
+                         'Press-Fit Flat',
+                         '3.325" Tapered',
+                         '3.325" Flat']
+            pBoards_multi = top_constraints[0]
+            top_probes = top_constraints[1]
+            topcomponents = top_constraints[2]
+            xmin, ymin, xmax, ymax = pBoards_multi.bounds
+            print("")
+            for j in range(len(child_prods)):
+                chance = random.uniform(0,1)
+                if mutation_rate > chance:
+                    print("Mutating pressure rod gene")
+                    while True:
+                        valid = True
+                        while True:
+                            # Replace the pressure rod with a random new one (flipping on/off and changing sizes will be handled by local search)
+                            x = random.uniform(xmin,xmax)
+                            y = random.uniform(ymin,ymax)
+                            rod_type_i = random.randint(0,3)
+                            on = random.randint(0,1)
+                            prod_new = constraints.PressureRod(x,y,rod_types[rod_type_i],on)
+                            # Make sure pressure rod is within the UUT and make sure it doesn't intersect any components, using the appropriate buffer sizes
+                            if not prod_new.tip_UUT_buffer.within(pBoards_multi):
+                                valid = False
+                                break
+                            if prod_new.tip_component_buffer.intersects(topcomponents):
+                                valid = False
+                                break
+                            
+                            # Make sure the pressure rod isn't too close to any top probes
+                            if prod_new.tip_from_top_probe_buffer.intersects(top_probes):
+                                valid = False
+                                break
+    
+                            # If the pressure rod is turned off, it's automatically valid
+                            if prod_new.on == 0:
+                                valid = True
+                                break
+                                
+                            # Make sure pressure rod doesn't conflict with any previously-placed pressure rods
+                            for k,prod_chosen in enumerate(child_prods):
+                                if k == j:
+                                    # Don't compare against the current pressure rod
+                                    continue
+                                dist = constraints.centroid_distance(prod_new.tip, prod_chosen.tip)
+                                if dist < prod_new.ctc:
+                                    valid = False
+                                    break
+                            if valid == False:
+                                break
+                            
+                            if valid == True:
+                                break
+                            
+                        if valid == True:
+                            child_prods[j] == prod_new
+                            print("Mutation produced a new pressure rod")
+                            break
+                    
+            
+            # Validate that at least one gene has been changed
+            for j in range(len(child_prods)):
+                if child_prods[j] != parent1_prods[j]:
+                    complete = True
+                    break
+            
+        # Interpret the child back to chromosome form
+        child_chromosome = constraints.interpret_prods_to_chromosome(child_prods)
+        offspring[i, :] = child_chromosome
         
-        # FIXME: ADD VERIFICATION HERE THAT THE OFFSPRING ARE VALID DESIGNS
+        # Plot the parent and child designs for examination
+        constraints.plot_prods_top_constraints(parent1_prods, top_constraints, f"Offspring {i}: Parent 1")
+        constraints.plot_prods_top_constraints(parent2_prods, top_constraints, f"Offspring {i}: Parent 2")
+        constraints.plot_prods_top_constraints(child_prods, top_constraints, f"Offspring {i}: Child (mutated)")
+        plt.show()
 
     return offspring    # arr(mutation_size x n_var)
 
@@ -272,14 +279,15 @@ def evaluation(pop, nobjs, gen, nprods, inputfile, constraint_geom):
         valid_circles = constraints.prods_to_valid_circles(prods)
         strain_xx, strain_yy, strain_xy, principalStrain_min, principalStrain_max = constraints.runFEA_valid_circles(valid_circles, df_PressureRods, root, inputfile, gen, i)
         
-        # fitness_values[i,0] = strain_xx
-        # fitness_values[i,1] = strain_yy
-        # fitness_values[i,2] = strain_xy
+        fitness_values[i,0] = strain_xx
+        fitness_values[i,1] = strain_yy
+        fitness_values[i,2] = strain_xy
+        fitness_values[i,3] = principalStrain_min + principalStrain_max
         # fitness_values[i,3] = principalStrain_min
         # fitness_values[i,4] = principalStrain_max
         
-        fitness_values[i,0] = np.abs(principalStrain_min)
-        fitness_values[i,1] = np.abs(principalStrain_max)
+        # fitness_values[i,0] = np.abs(principalStrain_min)
+        # fitness_values[i,1] = np.abs(principalStrain_max)
 
     return fitness_values
 
@@ -315,8 +323,8 @@ def remove_using_crowding(fitness_values, number_solutions_needed):
     selected_fitness_values = np.zeros((number_solutions_needed, len(fitness_values[0, :])))    # arr(num_sol_needed x 2)
     for i in range(number_solutions_needed):
         pop_size = pop_index.shape[0]
-        solution_1 = rn.randint(0, pop_size - 1)
-        solution_2 = rn.randint(0, pop_size - 1)
+        solution_1 = random.randint(0, pop_size - 1)
+        solution_2 = random.randint(0, pop_size - 1)
         if crowding_distance[solution_1] >= crowding_distance[solution_2]:
             # solution 1 is better than solution 2
             selected_pop_index[i] = pop_index[solution_1]
@@ -408,11 +416,12 @@ def main_optimization():
     print("Setting genetic algorithm parameters")
     pop_size = 10              # initial number of chromosomes
     rate_crossover = 5         # number of chromosomes that we apply crossover to
-    rate_mutation = 20          # number of chromosomes that we apply mutation to
+    rate_mutation = 5          # number of chromosomes that we apply mutation to
+    chance_mutation = 0.3       # normalized percent chance that an individual pressure rod will be mutated
     rate_local_search = 10      # number of chromosomes that we apply local_search to
     step_size = 0.1             # coordinate displacement during local_search
     maximum_generation = 5    # number of iterations
-    nobjs = 2
+    nobjs = 4
     
     nprods = 16
     # nprods = np.max([len(df_PressureRods), nprods_small, nprods_large])
@@ -424,17 +433,19 @@ def main_optimization():
     
     best_fitnesses_1 = []
     best_fitnesses_2 = []
+    best_fitnesses_3 = []
+    best_fitnesses_4 = []
     # NSGA-II main loop
     for i in range(maximum_generation):
         print(f"Performing crossover to create {rate_crossover} child designs")
         offspring_from_crossover = crossover_prods(pop, rate_crossover, nprods, top_constraints)
-        # offspring_from_mutation = mutation(pop, rate_mutation)
+        offspring_from_mutation = mutation(pop, rate_mutation, chance_mutation, nprods, top_constraints)
         # offspring_from_local_search = local_search(pop, rate_local_search, step_size)
         
         # we append children Q (cross-overs, mutations, local search) to paraents P
         # having parents in the mix, i.e. allowing for parents to progress to next iteration - Elitism
         pop = np.append(pop, offspring_from_crossover, axis=0)
-        # pop = np.append(pop, offspring_from_mutation, axis=0)
+        pop = np.append(pop, offspring_from_mutation, axis=0)
         # pop = np.append(pop, offspring_from_local_search, axis=0)
         # print(pop.shape)
         print("Evaluating fitnesses...")
@@ -443,6 +454,10 @@ def main_optimization():
         best_fitnesses_1.append(fitness_values[j,:])
         j = fitness_values[:,1].argmin()
         best_fitnesses_2.append(fitness_values[j,:])
+        j = fitness_values[:,2].argmin()
+        best_fitnesses_3.append(fitness_values[j,:])
+        j = fitness_values[:,3].argmin()
+        best_fitnesses_4.append(fitness_values[j,:])
         pop = selection(pop, fitness_values, pop_size)  # we arbitrary set desired pereto front size = pop_size
         print('Generation:', i)
         fig,ax = plt.subplots(dpi=300)
@@ -487,6 +502,8 @@ def main_optimization():
     # print(fitness_values)
     best_fitnesses_1 = np.asarray(best_fitnesses_1)
     best_fitnesses_2 = np.asarray(best_fitnesses_2)
+    best_fitnesses_3 = np.asarray(best_fitnesses_3)
+    best_fitnesses_4 = np.asarray(best_fitnesses_4)
     plt.figure(dpi=300)
     plt.scatter(fitness_values[:, 0],fitness_values[:, 1], label='Pareto optimal front')
     plt.scatter(best_fitnesses_1[:,0],best_fitnesses_1[:,1], label="Optimal objective 1")
