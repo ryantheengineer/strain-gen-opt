@@ -54,12 +54,14 @@ def resultsToDataframe(inputfile):
     return df
 
 def getFitness(dfmesh):
-    abssums = dfmesh.abs().sum()
-    strain_xx = abssums["strain_xx"]
-    strain_yy = abssums["strain_yy"]
-    strain_xy = abssums["strain_xy"]
-    principalStrain_min = abssums["principalStrain_min"]
-    principalStrain_max = abssums["principalStrain_max"]
+    # abssums = dfmesh.abs().sum()
+    absmeans = dfmesh.abs().mean()
+    # stdevs = dfmesh.std()
+    strain_xx = absmeans["strain_xx"]
+    strain_yy = absmeans["strain_yy"]
+    strain_xy = absmeans["strain_xy"]
+    principalStrain_min = absmeans["principalStrain_min"]
+    principalStrain_max = absmeans["principalStrain_max"]
     return strain_xx, strain_yy, strain_xy, principalStrain_min, principalStrain_max
     
 
