@@ -89,11 +89,11 @@ def crossover_prods(pop, crossover_rate, nprods, top_constraints):
         child_chromosome = constraints.interpret_prods_to_chromosome(child_prods)
         offspring[i, :] = child_chromosome
         
-        # Plot the parent and child designs for examination
-        constraints.plot_prods_top_constraints(parent1_prods, top_constraints, f"Offspring {i}: Parent 1")
-        constraints.plot_prods_top_constraints(parent2_prods, top_constraints, f"Offspring {i}: Parent 2")
-        constraints.plot_prods_top_constraints(child_prods, top_constraints, f"Offspring {i}: Child")
-        plt.show()
+        # # Plot the parent and child designs for examination
+        # constraints.plot_prods_top_constraints(parent1_prods, top_constraints, f"Offspring {i}: Parent 1")
+        # constraints.plot_prods_top_constraints(parent2_prods, top_constraints, f"Offspring {i}: Parent 2")
+        # constraints.plot_prods_top_constraints(child_prods, top_constraints, f"Offspring {i}: Child")
+        # plt.show()
         
     return offspring
 
@@ -159,11 +159,11 @@ def mutation(pop, n_mutated, mutation_rate, nprods, top_constraints):
             top_probes = top_constraints[1]
             topcomponents = top_constraints[2]
             xmin, ymin, xmax, ymax = pBoards_multi.bounds
-            print("")
+            # print("")
             for j in range(len(child_prods)):
                 chance = random.uniform(0,1)
                 if mutation_rate > chance:
-                    print("Mutating pressure rod gene")
+                    # print("Mutating pressure rod gene")
                     while True:
                         valid = True
                         while True:
@@ -208,7 +208,7 @@ def mutation(pop, n_mutated, mutation_rate, nprods, top_constraints):
                             
                         if valid == True:
                             child_prods[j] == prod_new
-                            print("Mutation produced a new pressure rod")
+                            # print("Mutation produced a new pressure rod")
                             break
                     
             
@@ -222,11 +222,11 @@ def mutation(pop, n_mutated, mutation_rate, nprods, top_constraints):
         child_chromosome = constraints.interpret_prods_to_chromosome(child_prods)
         offspring[i, :] = child_chromosome
         
-        # Plot the parent and child designs for examination
-        constraints.plot_prods_top_constraints(parent1_prods, top_constraints, f"Offspring {i}: Parent 1")
-        constraints.plot_prods_top_constraints(parent2_prods, top_constraints, f"Offspring {i}: Parent 2")
-        constraints.plot_prods_top_constraints(child_prods, top_constraints, f"Offspring {i}: Child (mutated)")
-        plt.show()
+        # # Plot the parent and child designs for examination
+        # constraints.plot_prods_top_constraints(parent1_prods, top_constraints, f"Offspring {i}: Parent 1")
+        # constraints.plot_prods_top_constraints(parent2_prods, top_constraints, f"Offspring {i}: Parent 2")
+        # constraints.plot_prods_top_constraints(child_prods, top_constraints, f"Offspring {i}: Child (mutated)")
+        # plt.show()
 
     return offspring    # arr(mutation_size x n_var)
 
@@ -414,16 +414,16 @@ def main_optimization():
     # lb = [-5, -5, -5]
     # ub = [5, 5, 5]
     print("Setting genetic algorithm parameters")
-    pop_size = 10              # initial number of chromosomes
-    rate_crossover = 5         # number of chromosomes that we apply crossover to
-    rate_mutation = 5          # number of chromosomes that we apply mutation to
+    pop_size = 30              # initial number of chromosomes
+    rate_crossover = 10         # number of chromosomes that we apply crossover to
+    rate_mutation = 10          # number of chromosomes that we apply mutation to
     chance_mutation = 0.3       # normalized percent chance that an individual pressure rod will be mutated
     rate_local_search = 10      # number of chromosomes that we apply local_search to
     step_size = 0.1             # coordinate displacement during local_search
-    maximum_generation = 5    # number of iterations
+    maximum_generation = 20    # number of iterations
     nobjs = 4
     
-    nprods = 16
+    nprods = 30
     # nprods = np.max([len(df_PressureRods), nprods_small, nprods_large])
     print("Creating initial random population")
     pop = constraints.initialize_population_simple(pop_size, nprods, pBoards, pComponentsTop, df_Probes, pBoards_diff)    # initial parents population P
@@ -520,7 +520,18 @@ def main_optimization():
     print(f"\n\nSetup time:\t{end_setup_time-start_time}")
     print(f"Total elapsed time:\t{end_time-start_time}")
     
-    return fitness_values
+    plt.figure(dpi=300)
+    plt.plot(best_fitnesses_1[:,0], label="Avg strain xx")
+    plt.plot(best_fitnesses_2[:,1], label="Avg strain yy")
+    plt.plot(best_fitnesses_3[:,2], label="Avg strain xy")
+    plt.plot(best_fitnesses_4[:,3], label="Sum principal strains")
+    plt.title("Fitnesses by objective")
+    plt.legend()
+    
+    
+    best_fitnesses = np.concatenate((best_fitnesses_1, best_fitnesses_2, best_fitnesses_3, best_fitnesses_4), axis=1)
+    
+    return fitness_values, best_fitnesses, pop
 
 if __name__ == "__main__":
-    main_optimization()
+    fitness_values, best_fitnesses, pop = main_optimization()

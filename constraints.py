@@ -979,16 +979,4 @@ if __name__ == "__main__":
     
     # print("--- COMPLETE ---")
     
-    # NOTE: As of 8/12, there needs to be a function for interpreting chromosomes
-    # and turning them into XML that can be run in FEA, as well as plotting
-    # them for quick reference and looking at the progression of designs as
-    # generations age.
     
-    
-    
-    
-    
-    # NOTE ABOUT CUSTOM MUTATION FUNCTION:
-        # Include a parent preference so if the genes from two parents conflict
-        # in a child, one parent's genes are preferred over the other in order
-        # to make sure the child is valid
