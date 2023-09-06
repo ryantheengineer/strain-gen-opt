@@ -12,6 +12,7 @@ import math
 import constraints
 import runFEA
 import time
+import multiprocessing
 
 # MINIMIZATION
 
@@ -252,7 +253,7 @@ def local_search(pop, n_sol, step_size, lb, ub):
 
 # Calculate fitness (obj function) values for each chromosome/solution
 def evaluation(pop, nobjs, gen, nprods, inputfile, constraint_geom):
-    fitness_values = np.zeros((pop.shape[0], nobjs))
+    # fitness_values = np.zeros((pop.shape[0], nobjs))
     
     # Read in constraint_geom (output of constraints.get_constraint_geometry())
     root = constraint_geom[0]
@@ -272,22 +273,31 @@ def evaluation(pop, nobjs, gen, nprods, inputfile, constraint_geom):
     df_PressureRods = constraint_geom[14]
     df_Standoffs = constraint_geom[15]
     
-    for i,chromosome in enumerate(pop):
+    ncpus = multiprocessing.cpu_count()
+    
+    prods = []
+    valid_circles = []
+    for i, chromosome in enumerate(pop):
+        prods.append(constraints.interpret_chromosome_to_prods(chromosome, nprods))
+        valid_circles.append(constraints.prods_to_valid_circles(prods[i]))
         
-        # FIXME: Need code to translate chromosomes into designs, then run FEA
-        prods = constraints.interpret_chromosome_to_prods(chromosome, nprods)
-        valid_circles = constraints.prods_to_valid_circles(prods)
-        strain_xx, strain_yy, strain_xy, principalStrain_min, principalStrain_max = constraints.runFEA_valid_circles(valid_circles, df_PressureRods, root, inputfile, gen, i)
+    pool = multiprocessing.Pool(processes=ncpus)
+    arg_tuples = [(valid_circles[i], df_PressureRods, root, inputfile, gen, i) for i in range(pop.shape[0])]
+    results_mp = pool.starmap(constraints.runFEA_valid_circles, arg_tuples)  # FIXME: runFEA_valid_circles is designed to reuse FEA.xml, not write a new version to include the new parameters. This probably causes issues with running multiple at the same time.
+    pool.close()
+    pool.join()
+    
+    fitness_values = np.asarray(list(zip(*results_mp)))
         
-        fitness_values[i,0] = strain_xx
-        fitness_values[i,1] = strain_yy
-        fitness_values[i,2] = strain_xy
-        fitness_values[i,3] = principalStrain_min + principalStrain_max
-        # fitness_values[i,3] = principalStrain_min
-        # fitness_values[i,4] = principalStrain_max
+        # # FIXME: Need code to translate chromosomes into designs, then run FEA
+        # prods = constraints.interpret_chromosome_to_prods(chromosome, nprods)
+        # valid_circles = constraints.prods_to_valid_circles(prods)
+        # strain_xx, strain_yy, strain_xy, principalStrain_min, principalStrain_max = constraints.runFEA_valid_circles(valid_circles, df_PressureRods, root, inputfile, gen, i)
         
-        # fitness_values[i,0] = np.abs(principalStrain_min)
-        # fitness_values[i,1] = np.abs(principalStrain_max)
+        # fitness_values[i,0] = strain_xx
+        # fitness_values[i,1] = strain_yy
+        # fitness_values[i,2] = strain_xy
+        # fitness_values[i,3] = principalStrain_min + principalStrain_max
 
     return fitness_values
 
@@ -414,16 +424,16 @@ def main_optimization():
     # lb = [-5, -5, -5]
     # ub = [5, 5, 5]
     print("Setting genetic algorithm parameters")
-    pop_size = 30              # initial number of chromosomes
-    rate_crossover = 10         # number of chromosomes that we apply crossover to
-    rate_mutation = 10          # number of chromosomes that we apply mutation to
+    pop_size = 4              # initial number of chromosomes
+    rate_crossover = 2         # number of chromosomes that we apply crossover to
+    rate_mutation = 1          # number of chromosomes that we apply mutation to
     chance_mutation = 0.3       # normalized percent chance that an individual pressure rod will be mutated
     rate_local_search = 10      # number of chromosomes that we apply local_search to
     step_size = 0.1             # coordinate displacement during local_search
     maximum_generation = 20    # number of iterations
     nobjs = 4
     
-    nprods = 30
+    nprods = 10
     # nprods = np.max([len(df_PressureRods), nprods_small, nprods_large])
     print("Creating initial random population")
     pop = constraints.initialize_population_simple(pop_size, nprods, pBoards, pComponentsTop, df_Probes, pBoards_diff)    # initial parents population P
