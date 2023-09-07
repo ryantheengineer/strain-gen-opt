@@ -44,9 +44,12 @@ def runFEA(FEApath, inputfile):
 def resultsToDataframe(inputfile):
     directory = pathlib.Path(inputfile)
     directory = str(directory.parent) + "\Output"
+    path, filename = os.path.split(inputfile)
+    filename = os.path.splitext(filename)[0]
     
-    # Get the most recently modified subdirectory
-    latest_subdir = max(glob.glob(os.path.join(directory, '*/')), key=os.path.getmtime)
+    # Get the most recently modified subdirectory that matches the needed substring from the inputfile
+    latest_subdir = max(glob.glob(os.path.join(directory, f'{filename}*/')), key=os.path.getmtime) # FIXME: Can't use this method with multiprocessing - gives multiple fitnesses that are identical
+    # latest_subdir = max(glob.glob(os.path.join(directory, '*/')), key=os.path.getmtime) # FIXME: Can't use this method with multiprocessing - gives multiple fitnesses that are identical
     
     meshfile = latest_subdir + "FEA_MeshNodes.csv"
     

@@ -16,18 +16,6 @@ import multiprocessing
 
 # MINIMIZATION
 
-# Initialize random population of parent chromosomes/solutions P
-# def random_population(n_var, n_sol, lb, ub):
-#     # n_var = number of variables
-#     # n_sol = number of random solutions
-#     # lb = lower bound
-#     # ub = upper bound
-#     pop = np.zeros((n_sol, n_var))
-#     for i in range(n_sol):
-#         pop[i,:] = np.random.uniform(lb, ub)
-    
-#     return pop
-
 # On each iteration, out of 2 randomly selected parents we create 2 offsprings
 # by taking fraction of genes from one parent and remaining fraction from other parent 
 def crossover_prods(pop, crossover_rate, nprods, top_constraints):
@@ -281,13 +269,22 @@ def evaluation(pop, nobjs, gen, nprods, inputfile, constraint_geom):
         prods.append(constraints.interpret_chromosome_to_prods(chromosome, nprods))
         valid_circles.append(constraints.prods_to_valid_circles(prods[i]))
         
+    # Generate the XML files sequentially
+    xml_filenames = []
+    for i, valid_design in enumerate(valid_circles):
+        xml_filenames.append(constraints.design_to_xml(valid_design, df_PressureRods, root, inputfile, gen, i))
+        
     pool = multiprocessing.Pool(processes=ncpus)
+    # arg_tuples = [(xml_filenames[i]) for i in range(pop.shape[0])]
     arg_tuples = [(valid_circles[i], df_PressureRods, root, inputfile, gen, i) for i in range(pop.shape[0])]
+    # arg_tuples = [(valid_circles[i], df_PressureRods, root, xml_filenames[i], gen, i) for i in range(pop.shape[0])]
+    # results_mp = pool.starmap(constraints.runFEA_new_path, arg_tuples)  # FIXME: runFEA_valid_circles is designed to reuse FEA.xml, not write a new version to include the new parameters. This probably causes issues with running multiple at the same time.
     results_mp = pool.starmap(constraints.runFEA_valid_circles, arg_tuples)  # FIXME: runFEA_valid_circles is designed to reuse FEA.xml, not write a new version to include the new parameters. This probably causes issues with running multiple at the same time.
     pool.close()
     pool.join()
     
-    fitness_values = np.asarray(list(zip(*results_mp)))
+    fitness_values = np.array(results_mp)
+    # fitness_values = np.asarray(list(zip(*results_mp)))
         
         # # FIXME: Need code to translate chromosomes into designs, then run FEA
         # prods = constraints.interpret_chromosome_to_prods(chromosome, nprods)
@@ -424,13 +421,13 @@ def main_optimization():
     # lb = [-5, -5, -5]
     # ub = [5, 5, 5]
     print("Setting genetic algorithm parameters")
-    pop_size = 4              # initial number of chromosomes
-    rate_crossover = 2         # number of chromosomes that we apply crossover to
-    rate_mutation = 1          # number of chromosomes that we apply mutation to
+    pop_size = 20              # initial number of chromosomes
+    rate_crossover = 10         # number of chromosomes that we apply crossover to
+    rate_mutation = 10          # number of chromosomes that we apply mutation to
     chance_mutation = 0.3       # normalized percent chance that an individual pressure rod will be mutated
     rate_local_search = 10      # number of chromosomes that we apply local_search to
     step_size = 0.1             # coordinate displacement during local_search
-    maximum_generation = 20    # number of iterations
+    maximum_generation = 30    # number of iterations
     nobjs = 4
     
     nprods = 10
@@ -452,7 +449,7 @@ def main_optimization():
         offspring_from_mutation = mutation(pop, rate_mutation, chance_mutation, nprods, top_constraints)
         # offspring_from_local_search = local_search(pop, rate_local_search, step_size)
         
-        # we append children Q (cross-overs, mutations, local search) to paraents P
+        # we append children Q (cross-overs, mutations, local search) to parents P
         # having parents in the mix, i.e. allowing for parents to progress to next iteration - Elitism
         pop = np.append(pop, offspring_from_crossover, axis=0)
         pop = np.append(pop, offspring_from_mutation, axis=0)

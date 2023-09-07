@@ -801,12 +801,12 @@ def runFEA_valid_circles(valid_circles, df_PressureRods, root, inputfile, gen, i
     # Set the salesOrder field (used in naming the output folder) to include
     # generation and iteration numbers
     salesOrder = root.find('.//salesOrder')
-    salesOrder.text = f"GEN{gen}ITER{iteration}"
+    salesOrder.text = f"GEN{gen}_ITER{iteration}"
     
     # Write the new element tree
     tree = ET.ElementTree(root)
     ET.indent(tree, '  ')
-    new_filename = "FEA_random_pressure_rods.xml"
+    new_filename = f"FEA_GEN{gen}_ITER{iteration}.xml"
     path, filename = os.path.split(inputfile)
     new_path = path + "/" + new_filename
     tree.write(new_path)
@@ -814,12 +814,119 @@ def runFEA_valid_circles(valid_circles, df_PressureRods, root, inputfile, gen, i
     FEApath = runFEA.loadFEApath('FEApath.pk')
     runFEA.runFEA(FEApath, new_path)
     
-    dfmesh = runFEA.resultsToDataframe(inputfile)
+    dfmesh = runFEA.resultsToDataframe(new_path)
+    # dfmesh = runFEA.resultsToDataframe(inputfile)
     
     strain_xx, strain_yy, strain_xy, principalStrain_min, principalStrain_max = runFEA.getFitness(dfmesh)
     
-    return strain_xx, strain_yy, strain_xy, principalStrain_min, principalStrain_max
+    results = (strain_xx, strain_yy, strain_xy, principalStrain_min, principalStrain_max)
     
+    return results
+
+def design_to_xml(valid_circles, df_PressureRods, root, inputfile, gen, iteration):
+    # Ensure correct type is used for integer columns
+    df_PressureRods['unimplemented1'] = df_PressureRods['unimplemented1'].astype(int)
+    df_PressureRods['unimplemented2'] = df_PressureRods['unimplemented2'].astype(int)
+    df_PressureRods['unimplemented3'] = df_PressureRods['unimplemented3'].astype(int)
+    df_PressureRods['unimplemented4'] = df_PressureRods['unimplemented4'].astype(int)
+    df_PressureRods['unimplemented5'] = df_PressureRods['unimplemented5'].astype(str)
+    df_PressureRods['unimplemented5'] = df_PressureRods['unimplemented5'].apply(str.lower)
+    df_PressureRods['unimplemented6'] = df_PressureRods['unimplemented6'].astype(int)
+    df_PressureRods['unimplemented7'] = df_PressureRods['unimplemented7'].astype(int)
+    df_PressureRods['unimplemented8'] = df_PressureRods['unimplemented8'].astype(int)
+    df_PressureRods['unimplemented10'] = df_PressureRods['unimplemented10'].astype(int)
+    df_PressureRods['unimplemented11'] = df_PressureRods['unimplemented11'].astype(int)
+    df_PressureRods['type'] = df_PressureRods['type'].astype(str)
+    df_PressureRods['unimplemented12'] = df_PressureRods['unimplemented12'].astype(str)
+    df_PressureRods['unimplemented12'] = df_PressureRods['unimplemented12'].apply(str.lower)
+    df_PressureRods['unimplemented13'] = df_PressureRods['unimplemented13'].astype(int)
+    
+    df = df_PressureRods.loc[0,:]
+    basic_vals = {}
+    for col in df.index:
+        basic_vals[col] = df[col]
+    # new_vals = [[] for col in df.index]
+    
+    xnew = []
+    ynew = []
+    for valid_circle in valid_circles:
+        xnew.append(valid_circle.centroid.x)
+        ynew.append(valid_circle.centroid.y)
+    
+    newdata = {}
+    for col in df.index:
+        if col == "x":
+            newdata[col] = xnew
+        elif col == "y":
+            newdata[col] = ynew
+        else:
+            newdata[col] = [basic_vals[col] for valid_circle in valid_circles]
+            
+    df_PressureRods_update = pd.DataFrame(newdata)
+    
+    # Get the rows of df_PressureRods_update as a list of strings
+    vals = df_PressureRods_update.to_string(header=False,
+                  index=False,
+                  index_names=False).split('\n')
+    for j,row in enumerate(vals):
+        splitrow = row.split()
+        newrow = []
+        for i,ele in enumerate(splitrow):
+            if i==13:
+                newrow.append(' '.join(splitrow[13:15]))
+            elif i==14:
+                continue
+            elif i==18:
+                newrow.append(''.join(splitrow[18:]))
+            elif i==19:
+                continue
+            elif i==20:
+                continue
+            else:
+                newrow.append(ele)
+        newrow = '|'.join(newrow)
+        vals[j] = newrow
+    # vals = ['|'.join(ele.split()) for ele in x
+    
+    # Delete the XML rows that need to be replaced
+    rows = root.find('.//table[@identifier="PressureRods"].//rows')
+    del rows[:]
+    
+    rowlist = [ET.SubElement(rows,'row') for val in vals]
+
+    for i,val in enumerate(vals):
+        rowlist[i].text = val
+    
+    # Set the salesOrder field (used in naming the output folder) to include
+    # generation and iteration numbers
+    salesOrder = root.find('.//salesOrder')
+    salesOrder.text = f"GEN{gen}_ITER{iteration}"
+    
+    # Write the new element tree
+    tree = ET.ElementTree(root)
+    ET.indent(tree, '  ')
+    new_filename = f"FEA_GEN{gen}_ITER{iteration}.xml"
+    path, filename = os.path.split(inputfile)
+    new_path = path + "/" + new_filename
+    tree.write(new_path)
+    
+    return new_path
+
+
+def runFEA_new_path(new_path_xml):
+    # Simplified and separated method that should run off a separately created XML file
+    FEApath = runFEA.loadFEApath('FEApath.pk')
+    runFEA.runFEA(FEApath, new_path_xml)
+    
+    dfmesh = runFEA.resultsToDataframe(new_path_xml)
+    
+    strain_xx, strain_yy, strain_xy, principalStrain_min, principalStrain_max = runFEA.getFitness(dfmesh)
+    
+    results = (strain_xx, strain_yy, strain_xy, principalStrain_min, principalStrain_max)
+    
+    return results
+    
+
 
 # %% Utility functions
 def plot_poly_list_w_holes(poly_list, fig, ax, color, linestyle, label):
