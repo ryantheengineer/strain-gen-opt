@@ -19,6 +19,7 @@ import multiprocessing
 # On each iteration, out of 2 randomly selected parents we create 2 offsprings
 # by taking fraction of genes from one parent and remaining fraction from other parent 
 def crossover_prods(pop, crossover_rate, nprods, top_constraints):
+    print(f"Performing crossover to create {crossover_rate} child designs")
     offspring = np.zeros((crossover_rate, pop.shape[1]))
     for i in range(crossover_rate):
         # Crossover with complete pressure rods.
@@ -221,22 +222,168 @@ def mutation(pop, n_mutated, mutation_rate, nprods, top_constraints):
 
 # Create some amount of offspring Q by adding fixed coordinate displacement to some 
 # randomly selected parent's genes/coordinates
-def local_search(pop, n_sol, step_size, lb, ub):
-    # number of offspring chromosomes generated from the local search
-    offspring = np.zeros((n_sol, pop.shape[1]))
-    for i in range(n_sol):
-        r1 = np.random.randint(0, pop.shape[0])
-        chromosome = pop[r1, :]
-        r2 = np.random.randint(0, pop.shape[1])
-        chromosome[r2] += np.random.uniform(-step_size, step_size)
-        if chromosome[r2] < lb[r2]:
-            chromosome[r2] = lb[r2]
-        if chromosome[r2] > ub[r2]:
-            chromosome[r2] = ub[r2]
+def local_search(pop, n_searched, localsearch_rate, fliprate, perturbrate, maxmag, typerate, nprods, top_constraints):
+    print("Entering local search phase...creating altered versions of other chromosomes")
+    offspring = np.zeros((n_searched, pop.shape[1]))
+    for i in range(n_searched):
+        complete = False
+        while complete is False:
+            r1 = np.random.randint(0, pop.shape[0])
+            parent1 = pop[r1]
             
-        # FIXME: ADD VERIFICATION HERE THAT THE OFFSPRING ARE VALID DESIGNS
+            # Interpret each parent into PressureRod representation
+            parent1_prods = constraints.interpret_chromosome_to_prods(parent1, nprods)
+            child_prods = parent1_prods.copy()
+            
+            
+            rod_types = ['Press-Fit Tapered',
+                         'Press-Fit Flat',
+                         '3.325" Tapered',
+                         '3.325" Flat']
+            pBoards_multi = top_constraints[0]
+            top_probes = top_constraints[1]
+            topcomponents = top_constraints[2]
+            xmin, ymin, xmax, ymax = pBoards_multi.bounds
+            for j in range(len(child_prods)):
+                chance = random.uniform(0,1)
+                if localsearch_rate > chance:
+                    while True:
+                        valid = True
+                        while True:
+                            # Chance to flip on/off parameter
+                            old_on = child_prods[j].on
+                            flip_chance = random.uniform(0,1)
+                            if fliprate > flip_chance:
+                                if old_on == 1:
+                                    new_on = 0
+                                else:
+                                    new_on = 1
+                                child_prods[j].update_pressure_rod(child_prods[j].x, child_prods[j].y, child_prods[j].rod_type, new_on)
+                                
+                                # Validate that the pressure rod doesn't conflict with other pressure rods
+                                if child_prods[j].on == 0:
+                                    valid = True
+                                    break
+                                # Make sure pressure rod doesn't conflict with any previously-placed pressure rods
+                                for k, prod_chosen in enumerate(child_prods):
+                                    if k == j:
+                                        # Don't compare against the current pressure rod
+                                        continue
+                                    dist = constraints.centroid_distance(child_prods[j].tip, prod_chosen.tip)
+                                    if dist < child_prods[j].ctc:
+                                        valid = False
+                                        break
+                                
+                        if valid == False:
+                            break
+                        
+                        if valid == True:
+                            break
+                        
+                    # If the pressure rod is on, then it may be perturbed in other
+                    # ways that will affect the design (position, type)
+                    if child_prods[j].on:
+                        chance = random.uniform(0,1)
+                        if perturbrate > chance:
+                            while True:
+                                valid = True
+                                while True:
+                                    # Position perturb first
+                                    mag = random.uniform(0, maxmag)
+                                    xp = random.uniform(-mag, mag)
+                                    yp = np.sqrt(mag**2 - xp**2)
+                                    yp = random.choice([yp, -yp])
+                                    
+                                    # Adjust x and y by perturbation
+                                    xnew = child_prods[j].x + xp
+                                    ynew = child_prods[j].y + yp
+                                    
+                                    child_prods[j].update_pressure_rod(xnew, ynew, child_prods[j].rod_type, child_prods[j].on)
+                                    
+                                    # Validate the perturbation here
+                                    # Make sure pressure rod is within the UUT and make sure it doesn't intersect any components, using the appropriate buffer sizes
+                                    if not child_prods[j].tip_UUT_buffer.within(pBoards_multi):
+                                        valid = False
+                                        break
+                                    if child_prods[j].tip_component_buffer.intersects(topcomponents):
+                                        valid = False
+                                        break
+                                    
+                                    # Make sure the pressure rod isn't too close to any top probes
+                                    if child_prods[j].tip_from_top_probe_buffer.intersects(top_probes):
+                                        valid = False
+                                        break
+                                        
+                                    # Make sure pressure rod doesn't conflict with any previously-placed pressure rods
+                                    for k,prod_chosen in enumerate(child_prods):
+                                        if k == j:
+                                            # Don't compare against the current pressure rod
+                                            continue
+                                        dist = constraints.centroid_distance(child_prods[j].tip, prod_chosen.tip)
+                                        if dist < child_prods[j].ctc:
+                                            valid = False
+                                            break
+                                    
+                                if valid == False:
+                                    break
+                                
+                                if valid == True:
+                                    break
+                        
+                        
+                        chance = random.uniform(0,1)
+                        if typerate > chance:
+                            # Get the index of the current rod_type in the rod_types list
+                            current_type_idx = rod_types.index(child_prods[j].rod_type)
+                            # Randomly shuffle the indices of the rod types that are not used
+                            available_indices = [0,1,2,3]
+                            available_indices.remove(current_type_idx)
+                            random.shuffle(available_indices)
+                            
+                            for idx in available_indices:
+                                valid = True
+                                child_prods[j].update_pressure_rod(child_prods[j].x, child_prods[j].y, rod_types[idx], child_prods[j].on)
+                                
+                                # Validate the new prod type. If it is valid, break.
+                                # Make sure pressure rod is within the UUT and make sure it doesn't intersect any components, using the appropriate buffer sizes
+                                if not child_prods[j].tip_UUT_buffer.within(pBoards_multi):
+                                    valid = False
+                                    continue
+                                if child_prods[j].tip_component_buffer.intersects(topcomponents):
+                                    valid = False
+                                    continue
+                                
+                                # Make sure the pressure rod isn't too close to any top probes
+                                if child_prods[j].tip_from_top_probe_buffer.intersects(top_probes):
+                                    valid = False
+                                    continue
+                                    
+                                # Make sure pressure rod doesn't conflict with any previously-placed pressure rods
+                                for k,prod_chosen in enumerate(child_prods):
+                                    if k == j:
+                                        # Don't compare against the current pressure rod
+                                        continue
+                                    dist = constraints.centroid_distance(child_prods[j].tip, prod_chosen.tip)
+                                    if dist < child_prods[j].ctc:
+                                        valid = False
+                                        break
+                            
+                                if valid:
+                                    break
+                            
+                            # If no other rod type is valid, put it back the way it was
+                            if valid == False:
+                                child_prods[j].update_pressure_rod(child_prods[j].x, child_prods[j].y, rod_types[current_type_idx], child_prods[j].on)
+                                
+            # Validate that at least one gene has been changed
+            for j in range(len(child_prods)):
+                if child_prods[j] != parent1_prods[j]:
+                    complete = True
+                    break
 
-        offspring[i,:] = chromosome
+        # Interpret the child back to chromosome form
+        child_chromosome = constraints.interpret_prods_to_chromosome(child_prods)
+        offspring[i, :] = child_chromosome
     return offspring    # arr(loc_search_size x n_var)
 
 # Calculate fitness (obj function) values for each chromosome/solution
@@ -423,14 +570,19 @@ def main_optimization():
     print("Setting genetic algorithm parameters")
     pop_size = 20              # initial number of chromosomes
     rate_crossover = 10         # number of chromosomes that we apply crossover to
-    rate_mutation = 10          # number of chromosomes that we apply mutation to
+    rate_mutation = 2          # number of chromosomes that we apply mutation to
     chance_mutation = 0.3       # normalized percent chance that an individual pressure rod will be mutated
-    rate_local_search = 10      # number of chromosomes that we apply local_search to
-    step_size = 0.1             # coordinate displacement during local_search
+    n_searched = 8      # number of chromosomes that we apply local_search to
+    chance_localsearch = 0.5
+    fliprate = 0.5
+    perturbrate = 0.5
+    maxmag = 0.1             # coordinate displacement during local_search
+    typerate = 0.5
     maximum_generation = 30    # number of iterations
     nobjs = 4
     
-    nprods = 10
+    nprods = 64
+    # nprods = 30
     # nprods = np.max([len(df_PressureRods), nprods_small, nprods_large])
     print("Creating initial random population")
     pop = constraints.initialize_population_simple(pop_size, nprods, pBoards, pComponentsTop, df_Probes, pBoards_diff)    # initial parents population P
@@ -444,10 +596,9 @@ def main_optimization():
     best_fitnesses_4 = []
     # NSGA-II main loop
     for i in range(maximum_generation):
-        print(f"Performing crossover to create {rate_crossover} child designs")
         offspring_from_crossover = crossover_prods(pop, rate_crossover, nprods, top_constraints)
         offspring_from_mutation = mutation(pop, rate_mutation, chance_mutation, nprods, top_constraints)
-        # offspring_from_local_search = local_search(pop, rate_local_search, step_size)
+        offspring_from_local_search = local_search(pop, n_searched, chance_localsearch, fliprate, perturbrate, maxmag, typerate, nprods, top_constraints)
         
         # we append children Q (cross-overs, mutations, local search) to parents P
         # having parents in the mix, i.e. allowing for parents to progress to next iteration - Elitism
