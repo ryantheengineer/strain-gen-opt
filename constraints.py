@@ -814,6 +814,7 @@ def runFEA_valid_circles(valid_circles, df_PressureRods, root, inputfile, gen, i
     FEApath = runFEA.loadFEApath('FEApath.pk')
     runFEA.runFEA(FEApath, new_path)
     
+    time.sleep(10)
     dfmesh = runFEA.resultsToDataframe(new_path)
     # dfmesh = runFEA.resultsToDataframe(inputfile)
     
