@@ -13,6 +13,7 @@ import constraints
 import runFEA
 import time
 import multiprocessing
+import copy
 
 # MINIMIZATION
 
@@ -42,13 +43,13 @@ def crossover_prods(pop, crossover_rate, nprods, top_constraints):
             # that both parents were previously validated against all constraints,
             # so the only way crossed genes in a child can be invalid is if pressure
             # rods are too close together.
-            child_prods = parent1_prods.copy()
+            child_prods = copy.deepcopy(parent1_prods)
             
             crossover_point = np.random.randint(1, nprods)
             
             for j in range(0, crossover_point):
                 # Get gene at position j from parent 2
-                child_prods[j] = parent2_prods[j]
+                child_prods[j] = copy.deepcopy(parent2_prods[j])
                 
                 # Check if the current potentially crossed gene violates any
                 # other genes, and if so, replace that gene instead of gene j
@@ -113,13 +114,13 @@ def mutation(pop, n_mutated, mutation_rate, nprods, top_constraints):
             # that both parents were previously validated against all constraints,
             # so the only way crossed genes in a child can be invalid is if pressure
             # rods are too close together.
-            child_prods = parent1_prods.copy()
+            child_prods = copy.deepcopy(parent1_prods)
             
             crossover_point = np.random.randint(1, nprods)
             
             for j in range(0, crossover_point):
                 # Get gene at position j from parent 2
-                child_prods[j] = parent2_prods[j]
+                child_prods[j] = copy.deepcopy(parent2_prods[j])
                 
                 # Check if the current potentially crossed gene violates any
                 # other genes, and if so, replace that gene instead of gene j
@@ -226,6 +227,7 @@ def local_search(pop, n_searched, localsearch_rate, fliprate, perturbrate, maxma
     print("Entering local search phase...creating altered versions of other chromosomes")
     offspring = np.zeros((n_searched, pop.shape[1]))
     for i in range(n_searched):
+        # print(f"Local search {i} of {n_searched}")
         complete = False
         while complete is False:
             r1 = np.random.randint(0, pop.shape[0])
@@ -233,7 +235,7 @@ def local_search(pop, n_searched, localsearch_rate, fliprate, perturbrate, maxma
             
             # Interpret each parent into PressureRod representation
             parent1_prods = constraints.interpret_chromosome_to_prods(parent1, nprods)
-            child_prods = parent1_prods.copy()
+            child_prods = copy.deepcopy(parent1_prods)
             
             
             rod_types = ['Press-Fit Tapered',
@@ -258,10 +260,15 @@ def local_search(pop, n_searched, localsearch_rate, fliprate, perturbrate, maxma
                                     new_on = 0
                                 else:
                                     new_on = 1
+                                # print(f"Flipped prod {j} from {old_on} to {new_on}")
+                                # print(f"\nChild prod {j} before:\t{child_prods[j].on}")
+                                # print(f"Parent prod {j} before:\t{parent1_prods[j].on}")
                                 child_prods[j].update_pressure_rod(child_prods[j].x, child_prods[j].y, child_prods[j].rod_type, new_on)
+                                # print(f"Child prod {j} after:\t{child_prods[j].on}")
+                                # print(f"Parent prod {j} after:\t{parent1_prods[j].on}")
                                 
                                 # Validate that the pressure rod doesn't conflict with other pressure rods
-                                if child_prods[j].on == 0:
+                                if child_prods[j].on == 0.0:
                                     valid = True
                                     break
                                 # Make sure pressure rod doesn't conflict with any previously-placed pressure rods
@@ -271,8 +278,11 @@ def local_search(pop, n_searched, localsearch_rate, fliprate, perturbrate, maxma
                                         continue
                                     dist = constraints.centroid_distance(child_prods[j].tip, prod_chosen.tip)
                                     if dist < child_prods[j].ctc:
+                                        # print(f"prod {j} was too close to another prod")
                                         valid = False
                                         break
+                            else:
+                                break
                                 
                         if valid == False:
                             break
@@ -298,7 +308,12 @@ def local_search(pop, n_searched, localsearch_rate, fliprate, perturbrate, maxma
                                     xnew = child_prods[j].x + xp
                                     ynew = child_prods[j].y + yp
                                     
+                                    # print(f"\nChild prod {j} before:\t{child_prods[j].x}, {child_prods[j].y}")
+                                    # print(f"Parent prod {j} before:\t{parent1_prods[j].x}, {parent1_prods[j].y}")                                    
                                     child_prods[j].update_pressure_rod(xnew, ynew, child_prods[j].rod_type, child_prods[j].on)
+                                    # print(f"\nChild prod {j} after:\t{child_prods[j].x}, {child_prods[j].y}")
+                                    # print(f"Parent prod {j} after:\t{parent1_prods[j].x}, {parent1_prods[j].y}")                                    
+                                    
                                     
                                     # Validate the perturbation here
                                     # Make sure pressure rod is within the UUT and make sure it doesn't intersect any components, using the appropriate buffer sizes
@@ -323,6 +338,9 @@ def local_search(pop, n_searched, localsearch_rate, fliprate, perturbrate, maxma
                                         if dist < child_prods[j].ctc:
                                             valid = False
                                             break
+                                        
+                                else:
+                                    break
                                     
                                 if valid == False:
                                     break
@@ -342,7 +360,11 @@ def local_search(pop, n_searched, localsearch_rate, fliprate, perturbrate, maxma
                             
                             for idx in available_indices:
                                 valid = True
+                                # print(f"\nChild prod {j} before:\t{child_prods[j].rod_type}")
+                                # print(f"Child prod {j} before:\t{parent1_prods[j].rod_type}")
                                 child_prods[j].update_pressure_rod(child_prods[j].x, child_prods[j].y, rod_types[idx], child_prods[j].on)
+                                # print(f"Child prod {j} after:\t{child_prods[j].rod_type}")
+                                # print(f"Child prod {j} after:\t{parent1_prods[j].rod_type}")
                                 
                                 # Validate the new prod type. If it is valid, break.
                                 # Make sure pressure rod is within the UUT and make sure it doesn't intersect any components, using the appropriate buffer sizes
@@ -373,13 +395,19 @@ def local_search(pop, n_searched, localsearch_rate, fliprate, perturbrate, maxma
                             
                             # If no other rod type is valid, put it back the way it was
                             if valid == False:
+                                # print("Had to use original prod type")
                                 child_prods[j].update_pressure_rod(child_prods[j].x, child_prods[j].y, rod_types[current_type_idx], child_prods[j].on)
                                 
             # Validate that at least one gene has been changed
             for j in range(len(child_prods)):
                 if child_prods[j] != parent1_prods[j]:
                     complete = True
+                    # print(f"Prod {j} has been changed")
+                    # print("At least one gene changed via local search")
                     break
+                else:
+                    pass
+                    # print("\nNO PRESSURE RODS WERE CHANGED COMPARED TO THE PARENT DESIGN\n")
 
         # Interpret the child back to chromosome form
         child_chromosome = constraints.interpret_prods_to_chromosome(child_prods)
@@ -570,23 +598,22 @@ def main_optimization():
     print("Setting genetic algorithm parameters")
     pop_size = 20              # initial number of chromosomes
     rate_crossover = 10         # number of chromosomes that we apply crossover to
-    rate_mutation = 2          # number of chromosomes that we apply mutation to
+    rate_mutation = 10          # number of chromosomes that we apply mutation to
     chance_mutation = 0.3       # normalized percent chance that an individual pressure rod will be mutated
-    n_searched = 8      # number of chromosomes that we apply local_search to
+    n_searched = 10      # number of chromosomes that we apply local_search to
     chance_localsearch = 0.5
-    fliprate = 0.5
-    perturbrate = 0.5
+    fliprate = 0.3
+    perturbrate = 1.0
     maxmag = 0.1             # coordinate displacement during local_search
-    typerate = 0.5
+    typerate = 0.3
     maximum_generation = 30    # number of iterations
     nobjs = 4
     
-    nprods = 64
-    # nprods = 30
+    # nprods = 64
+    nprods = 30
     # nprods = np.max([len(df_PressureRods), nprods_small, nprods_large])
     print("Creating initial random population")
     pop = constraints.initialize_population_simple(pop_size, nprods, pBoards, pComponentsTop, df_Probes, pBoards_diff)    # initial parents population P
-    
     pop = np.asarray(pop)
     end_setup_time = time.time()
     
@@ -600,11 +627,10 @@ def main_optimization():
         offspring_from_mutation = mutation(pop, rate_mutation, chance_mutation, nprods, top_constraints)
         offspring_from_local_search = local_search(pop, n_searched, chance_localsearch, fliprate, perturbrate, maxmag, typerate, nprods, top_constraints)
         
-        # we append children Q (cross-overs, mutations, local search) to parents P
-        # having parents in the mix, i.e. allowing for parents to progress to next iteration - Elitism
+        # Append children (crossover, mutation, local search) to parents
         pop = np.append(pop, offspring_from_crossover, axis=0)
         pop = np.append(pop, offspring_from_mutation, axis=0)
-        # pop = np.append(pop, offspring_from_local_search, axis=0)
+        pop = np.append(pop, offspring_from_local_search, axis=0)
         # print(pop.shape)
         print("Evaluating fitnesses...")
         fitness_values = evaluation(pop, nobjs, i, nprods, inputfile, constraint_geom)

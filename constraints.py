@@ -814,7 +814,14 @@ def runFEA_valid_circles(valid_circles, df_PressureRods, root, inputfile, gen, i
     FEApath = runFEA.loadFEApath('FEApath.pk')
     runFEA.runFEA(FEApath, new_path)
     
-    time.sleep(10)
+    time.sleep(12)
+    # time_to_wait = 3*60
+    # time_counter = 0
+    # while not os.path.exists(new_path):
+    #     time.sleep(1)
+    #     time_counter += 1
+    #     if time_counter > time_to_wait:
+    #         raise FileNotFoundError(f"No such file or directory: {new_path}")
     dfmesh = runFEA.resultsToDataframe(new_path)
     # dfmesh = runFEA.resultsToDataframe(inputfile)
     
