@@ -38,7 +38,7 @@ def loadFEApath(filename):
     return FEApath
 
 def runFEA(FEApath, inputfile):
-    args = [FEApath, inputfile]
+    args = [FEApath, inputfile, "/noprogressbar"]
     subprocess.call(args, shell=False)
 
 def resultsToDataframe(inputfile):

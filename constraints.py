@@ -457,6 +457,8 @@ def create_chromosome(nprods, pBoards, pComponentsTop, df_Probes, pBoards_diff):
     chromosome_rod_type = []
     chromosome_on = []
     prods_chosen = []
+    tries = 10
+    
     while len(chromosome_x) < nprods:
         valid = True
         x = random.uniform(xmin,xmax)
@@ -464,25 +466,126 @@ def create_chromosome(nprods, pBoards, pComponentsTop, df_Probes, pBoards_diff):
         rod_type_i = random.randint(0,3)
         on = random.randint(0,1)
         prod = PressureRod(x,y,rod_types[rod_type_i],on)
+        intersects_topcomponents = False
+        intersects_topprobes = False
+        centroids = []
+        perturbing = False
         
         # Make sure pressure rod is within the UUT and make sure it doesn't intersect any components, using the appropriate buffer sizes
         if not prod.tip_UUT_buffer.within(pBoards_multi):
             continue
-        if prod.tip_component_buffer.intersects(topcomponents):
-            continue
         
-        # Make sure the pressure rod isn't too close to any top probes
+        ### TRYING MOVING AWAY FROM INTERSECTION VIOLATIONS TO SALVAGE DESIGN ###
+        # Gather status of currently placed prod
+        if prod.tip_component_buffer.intersects(topcomponents):
+            intersects_topcomponents = True
+            intersection_topcomponents = prod.tip_component_buffer.intersection(topcomponents)
+            
         if prod.tip_from_top_probe_buffer.intersects(top_probes):
-            continue
+            intersects_topprobes = True
+            intersection_topprobes = prod.tip_from_top_probe_buffer.intersection(top_probes)
+        
+        # Parse the status of intersections
+        if not intersects_topcomponents and not intersects_topprobes:
+            pass
+        elif intersects_topcomponents and not intersects_topprobes:
+            perturbing = True
+            if intersection_topcomponents.geom_type == "Polygon":
+                centroids.append(intersection_topcomponents.centroid)
+            else:
+                for poly in intersection_topcomponents.geoms:
+                    centroids.append(poly.centroid)
+        elif not intersects_topcomponents and intersects_topprobes:
+            perturbing = True
+            if intersection_topprobes.geom_type == "Polygon":
+                centroids.append(intersection_topprobes.centroid)
+            else:
+                for poly in intersection_topprobes.geoms:
+                    centroids.append(poly.centroid)                    
+        else:
+            perturbing = True
+            # both top components and top probes are intersected by the current prod
+            if intersection_topcomponents.geom_type == "Polygon":
+                centroids.append(intersection_topcomponents.centroid)
+            else:
+                for poly in intersection_topcomponents.geoms:
+                    centroids.append(poly.centroid)
+                    
+            if intersection_topprobes.geom_type == "Polygon":
+                centroids.append(intersection_topprobes.centroid)
+            else:
+                for poly in intersection_topprobes.geoms:
+                    centroids.append(poly.centroid)
+        
+        if perturbing:                    
+            centroids_x = [centroid.x for centroid in centroids]
+            centroids_y = [centroid.y for centroid in centroids]
+            
+            avg_x = np.mean(centroids_x)
+            avg_y = np.mean(centroids_y)
+            
+            diff_x = prod.x - avg_x
+            diff_y = prod.y - avg_y
+            
+            mag_diff = np.sqrt(diff_x**2 + diff_y**2)
+            
+            unit_x = diff_x / mag_diff
+            unit_y = diff_y / mag_diff
+            
+            # print("")
+            # print("-"*60)
+            # print("PERTURBING PROD AWAY FROM INTERSECTION")
+            
+            for i in range(tries):
+                valid = True
+                prodxmin, prodymin, prodxmax, prodymax = prod.tip_component_buffer.bounds
+                stepsize = (prodxmax - prodxmin)/tries
+                new_x = prod.x + unit_x*stepsize
+                new_y = prod.y + unit_y*stepsize
+                
+                prod.update_pressure_rod(new_x, new_y, prod.rod_type, prod.on)
+                
+                topcomponent_intersection_area = prod.tip_component_buffer.intersection(topcomponents).area
+                top_probe_intersection_area = prod.tip_from_top_probe_buffer.intersection(top_probes).area
+                
+                # print(f"\n{topcomponent_intersection_area} intersection with top components")
+                # print(f"{top_probe_intersection_area} intersection with top probes")
+                
+                if prod.tip_component_buffer.intersects(topcomponents):
+                    valid = False
+                    continue
+                if prod.tip_from_top_probe_buffer.intersects(top_probes):
+                    valid = False
+                    continue
+                
+                if valid == True:
+                    break
+                
+            
+                
+            
+        
+        
+        # ## END NEW CODE ###
+        
+        # # ## ORIGINAL CODE ###
+        # if prod.tip_component_buffer.intersects(topcomponents):
+        #     continue
+        
+        # # Make sure the pressure rod isn't too close to any top probes
+        # if prod.tip_from_top_probe_buffer.intersects(top_probes):
+        #     continue
             
         # Make sure pressure rod doesn't conflict with any previously-placed pressure rods
-        for prod_chosen in prods_chosen:
-            dist = centroid_distance(prod.tip,prod_chosen.tip)
-            if dist < prod.ctc:
-                valid = False
-                break
-        if valid == False:
-            continue
+        if len(prods_chosen) > 0:
+            for prod_chosen in prods_chosen:
+                dist = centroid_distance(prod.tip,prod_chosen.tip)
+                if dist < prod.ctc:
+                    valid = False
+                    break
+            if valid == False:
+                continue
+        ### END ORIGINAL CODE ###
         
         if valid == True:
             prods_chosen.append(prod)
@@ -665,7 +768,11 @@ def initialize_population_multiprocessing(nchromosomes, nprods, pBoards, pCompon
     return initial_population
 
 def initialize_population_simple(npop, nprods, pBoards, pComponentsTop, df_Probes, pBoards_diff):
-    initial_population = [create_chromosome(nprods,pBoards,pComponentsTop,df_Probes,pBoards_diff) for _ in range(npop)] # Could this be modified to use multiprocessing? This will become very time intensive with larger populations
+    initial_population = []
+    for i in range(npop):
+        initial_population.append(create_chromosome(nprods,pBoards,pComponentsTop,df_Probes,pBoards_diff))
+        print(f"Chromosome {i} of {npop} created")
+    # initial_population = [create_chromosome(nprods,pBoards,pComponentsTop,df_Probes,pBoards_diff) for _ in range(npop)] # Could this be modified to use multiprocessing? This will become very time intensive with larger populations
     return initial_population
 
 def interpret_chromosome_to_prods(chromosome, nprods):

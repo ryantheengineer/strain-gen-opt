@@ -596,7 +596,7 @@ def main_optimization():
     # lb = [-5, -5, -5]
     # ub = [5, 5, 5]
     print("Setting genetic algorithm parameters")
-    pop_size = 20              # initial number of chromosomes
+    pop_size = 40              # initial number of chromosomes
     rate_crossover = 10         # number of chromosomes that we apply crossover to
     rate_mutation = 10          # number of chromosomes that we apply mutation to
     chance_mutation = 0.3       # normalized percent chance that an individual pressure rod will be mutated
@@ -606,7 +606,7 @@ def main_optimization():
     perturbrate = 1.0
     maxmag = 0.1             # coordinate displacement during local_search
     typerate = 0.3
-    maximum_generation = 30    # number of iterations
+    maximum_generation = 10    # number of iterations
     nobjs = 4
     
     # nprods = 64
