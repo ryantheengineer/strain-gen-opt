@@ -458,7 +458,13 @@ def evaluation(pop, nobjs, gen, nprods, inputfile, constraint_geom):
     pool.close()
     pool.join()
     
-    fitness_values = np.array(results_mp)
+    # Retrieve the FEA results
+    results = []
+    for i in range(pop.shape[0]):
+        results.append(constraints.read_FEA_results(root, inputfile, gen, i))    
+    
+    fitness_values = np.array(results)
+    # fitness_values = np.array(results_mp)
     # fitness_values = np.asarray(list(zip(*results_mp)))
         
         # # FIXME: Need code to translate chromosomes into designs, then run FEA
@@ -596,11 +602,11 @@ def main_optimization():
     # lb = [-5, -5, -5]
     # ub = [5, 5, 5]
     print("Setting genetic algorithm parameters")
-    pop_size = 40              # initial number of chromosomes
-    rate_crossover = 10         # number of chromosomes that we apply crossover to
-    rate_mutation = 10          # number of chromosomes that we apply mutation to
+    pop_size = 8              # initial number of chromosomes
+    rate_crossover = 2         # number of chromosomes that we apply crossover to
+    rate_mutation = 2          # number of chromosomes that we apply mutation to
     chance_mutation = 0.3       # normalized percent chance that an individual pressure rod will be mutated
-    n_searched = 10      # number of chromosomes that we apply local_search to
+    n_searched = 2      # number of chromosomes that we apply local_search to
     chance_localsearch = 0.5
     fliprate = 0.3
     perturbrate = 1.0

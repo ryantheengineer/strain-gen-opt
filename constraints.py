@@ -921,22 +921,41 @@ def runFEA_valid_circles(valid_circles, df_PressureRods, root, inputfile, gen, i
     FEApath = runFEA.loadFEApath('FEApath.pk')
     runFEA.runFEA(FEApath, new_path)
     
-    time.sleep(12)
-    # time_to_wait = 3*60
-    # time_counter = 0
-    # while not os.path.exists(new_path):
-    #     time.sleep(1)
-    #     time_counter += 1
-    #     if time_counter > time_to_wait:
-    #         raise FileNotFoundError(f"No such file or directory: {new_path}")
+    # time.sleep(12)
+    # # time_to_wait = 3*60
+    # # time_counter = 0
+    # # while not os.path.exists(new_path):
+    # #     time.sleep(1)
+    # #     time_counter += 1
+    # #     if time_counter > time_to_wait:
+    # #         raise FileNotFoundError(f"No such file or directory: {new_path}")
+    # dfmesh = runFEA.resultsToDataframe(new_path)
+    # # dfmesh = runFEA.resultsToDataframe(inputfile)
+    
+    # strain_xx, strain_yy, strain_xy, principalStrain_min, principalStrain_max = runFEA.getFitness(dfmesh)
+    
+    # results = (strain_xx, strain_yy, strain_xy, principalStrain_min, principalStrain_max)
+    results = (gen, iteration)
+    
+    return results
+    
+
+def read_FEA_results(root, inputfile, gen, iteration):
+    # Write the new element tree
+    tree = ET.ElementTree(root)
+    ET.indent(tree, '  ')
+    new_filename = f"FEA_GEN{gen}_ITER{iteration}.xml"
+    path, filename = os.path.split(inputfile)
+    new_path = path + "/" + new_filename
+    
     dfmesh = runFEA.resultsToDataframe(new_path)
-    # dfmesh = runFEA.resultsToDataframe(inputfile)
     
     strain_xx, strain_yy, strain_xy, principalStrain_min, principalStrain_max = runFEA.getFitness(dfmesh)
     
     results = (strain_xx, strain_yy, strain_xy, principalStrain_min, principalStrain_max)
     
     return results
+    
 
 def design_to_xml(valid_circles, df_PressureRods, root, inputfile, gen, iteration):
     # Ensure correct type is used for integer columns
