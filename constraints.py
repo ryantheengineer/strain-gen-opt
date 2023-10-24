@@ -13,9 +13,9 @@ FROM THE XML DESIGN INPUT.
 
 from shapely.geometry import Point, Polygon, MultiPolygon
 from shapely.affinity import rotate, translate
-from shapely import buffer
+# from shapely import buffer
 from shapely.ops import unary_union
-import xmltodict
+# import xmltodict
 import pandas as pd
 import numpy as np
 import random
@@ -305,6 +305,7 @@ class PressureRod():
         self.rod_type = rod_type
         self.on = on
         self.ctc = 0.375
+        self.tip_from_UUT_edge = 0.0
         self.update_pressure_rod(self.x, self.y, self.rod_type, self.on)        
         
     def select_rod_type(self, rod_type):
@@ -329,21 +330,22 @@ class PressureRod():
     def update_pressure_rod(self, new_x, new_y, new_rod_type, new_on):
         self.x = new_x
         self.y = new_y
+        self.center = Point(self.x, self.y)
         self.select_rod_type(new_rod_type)
         self.rtip = self.dtip/2.0
         self.rtop = self.dtop/2.0
         self.tip = place_circle(new_x, new_y, self.rtip)
         self.top = place_circle(new_x, new_y, self.rtop)
-        self.tip_from_components = self.rtip + 0.0625
+        self.tip_from_components = self.rtip + 0.035
         self.top_from_components = self.rtop + 0.0625
-        self.tip_from_UUT_edge = self.rtip + 0.0
         self.tip_from_top_probes = self.rtip + 0.125
-        self.top_from_top_probes = self.rtop + 0.125
+        self.top_from_top_probes = self.rtop + 0.04
         self.tip_component_buffer = place_circle(new_x, new_y, self.rtip + self.tip_from_components)
         self.top_component_buffer = place_circle(new_x, new_y, self.rtop + self.top_from_components)
         self.tip_UUT_buffer = place_circle(new_x, new_y, self.rtip + self.tip_from_UUT_edge)
         self.tip_from_top_probe_buffer = place_circle(new_x, new_y, self.rtip + self.tip_from_top_probes)
         self.top_from_top_probe_buffer = place_circle(new_x, new_y, self.rtop + self.top_from_top_probes)
+        self.prod_to_prod_buffer = place_circle(new_x, new_y, self.rtop + 0.025)
         self.on = new_on
         
         
@@ -472,7 +474,7 @@ def create_chromosome(nprods, pBoards, pComponentsTop, df_Probes, pBoards_diff):
         perturbing = False
         
         # Make sure pressure rod is within the UUT and make sure it doesn't intersect any components, using the appropriate buffer sizes
-        if not prod.tip_UUT_buffer.within(pBoards_multi):
+        if not prod.center.within(pBoards_multi):
             continue
         
         ### TRYING MOVING AWAY FROM INTERSECTION VIOLATIONS TO SALVAGE DESIGN ###
@@ -579,10 +581,13 @@ def create_chromosome(nprods, pBoards, pComponentsTop, df_Probes, pBoards_diff):
         # Make sure pressure rod doesn't conflict with any previously-placed pressure rods
         if len(prods_chosen) > 0:
             for prod_chosen in prods_chosen:
-                dist = centroid_distance(prod.tip,prod_chosen.tip)
-                if dist < prod.ctc:
+                if prod_chosen.top.intersects(prod.top_from_top_probe_buffer):
                     valid = False
                     break
+                # dist = centroid_distance(prod.tip,prod_chosen.tip)
+                # if dist < prod.ctc:
+                #     valid = False
+                #     break
             if valid == False:
                 continue
         ### END ORIGINAL CODE ###
@@ -658,25 +663,25 @@ def plot_prods_top_constraints(prods, top_constraints, title):
     # "On" pressure rods with offsets
     prods_poly_list_on = [prod.tip for prod in prods if prod.on]
     prods_tip_component_buffer_on = [prod.tip_component_buffer for prod in prods if prod.on]
-    prods_tip_UUT_buffer_on = [prod.tip_UUT_buffer for prod in prods if prod.on]
+    # prods_tip_UUT_buffer_on = [prod.tip_UUT_buffer for prod in prods if prod.on]
     prods_tip_from_top_probe_buffer_on = [prod.tip_from_top_probe_buffer for prod in prods if prod.on]
     linestyle = '-'
     label = "Pressure Rods - On"
     plot_poly_list_w_holes(prods_poly_list_on, fig, ax, 'g', linestyle, label)
-    plot_poly_list_w_holes(prods_tip_UUT_buffer_on, fig, ax, 'lime', linestyle, label)
+    # plot_poly_list_w_holes(prods_tip_UUT_buffer_on, fig, ax, 'lime', linestyle, label)
     plot_poly_list_w_holes(prods_tip_component_buffer_on, fig, ax, 'turquoise', linestyle, label)
     plot_poly_list_w_holes(prods_tip_from_top_probe_buffer_on, fig, ax, 'teal', linestyle, label)
     
     # "Off pressure rods with offsets
     prods_poly_list_off = [prod.tip for prod in prods if not prod.on]
     prods_tip_component_buffer_off = [prod.tip_component_buffer for prod in prods if not prod.on]
-    prods_tip_UUT_buffer_off = [prod.tip_UUT_buffer for prod in prods if not prod.on]
+    # prods_tip_UUT_buffer_off = [prod.tip_UUT_buffer for prod in prods if not prod.on]
     prods_tip_from_top_probe_buffer_off = [prod.tip_from_top_probe_buffer for prod in prods if not prod.on]
     
     linestyle = '-'
     label = "Pressure Rods - Off"
     plot_poly_list_w_holes(prods_poly_list_off, fig, ax, 'r', linestyle, label)
-    plot_poly_list_w_holes(prods_tip_UUT_buffer_off, fig, ax, 'yellow', linestyle, label)
+    # plot_poly_list_w_holes(prods_tip_UUT_buffer_off, fig, ax, 'yellow', linestyle, label)
     plot_poly_list_w_holes(prods_tip_component_buffer_off, fig, ax, 'gold', linestyle, label)
     plot_poly_list_w_holes(prods_tip_from_top_probe_buffer_off, fig, ax, 'darkorange', linestyle, label)
     
@@ -699,7 +704,7 @@ def validate_prod(prod, prods_chosen, top_constraints):
     # prod = PressureRod(x,y,rod_types[rod_type_i],on)
     while True:        
         # Make sure pressure rod is within the UUT and make sure it doesn't intersect any components, using the appropriate buffer sizes
-        if not prod.tip_UUT_buffer.within(pBoards_multi):
+        if not prod.center.within(pBoards_multi):
             valid = False
             break
         if prod.tip_component_buffer.intersects(topcomponents):
@@ -718,10 +723,13 @@ def validate_prod(prod, prods_chosen, top_constraints):
             
         # Make sure pressure rod doesn't conflict with any previously-placed pressure rods
         for prod_chosen in prods_chosen:
-            dist = centroid_distance(prod.tip,prod_chosen.tip)
-            if dist < prod.ctc:
+            if prod_chosen.top.intersects(prod.top_from_top_probe_buffer):
                 valid = False
                 break
+            # dist = centroid_distance(prod.tip,prod_chosen.tip)
+            # if dist < prod.ctc:
+            #     valid = False
+            #     break
         if valid == False:
             break
         

@@ -14,12 +14,35 @@ import runFEA
 import time
 import multiprocessing
 import copy
+import os
+from datetime import datetime
 
 # MINIMIZATION
 
-# On each iteration, out of 2 randomly selected parents we create 2 offsprings
-# by taking fraction of genes from one parent and remaining fraction from other parent 
+# On each iteration, out of 2 randomly selected parents we create 2 offspring
+# by taking some genes from one parent and the rest from another parent
 def crossover_prods(pop, crossover_rate, nprods, top_constraints):
+    """
+    Custom crossover function, using the pressure rod representation of each
+    chromosome (individual design).
+
+    Parameters
+    ----------
+    pop : TYPE
+        DESCRIPTION.
+    crossover_rate : TYPE
+        DESCRIPTION.
+    nprods : int
+        Number of pressure rods available in the design.
+    top_constraints : TYPE
+        DESCRIPTION.
+
+    Returns
+    -------
+    offspring : TYPE
+        DESCRIPTION.
+
+    """
     print(f"Performing crossover to create {crossover_rate} child designs")
     offspring = np.zeros((crossover_rate, pop.shape[1]))
     for i in range(crossover_rate):
@@ -91,6 +114,29 @@ def crossover_prods(pop, crossover_rate, nprods, top_constraints):
 
 # Perform crossover with mutation
 def mutation(pop, n_mutated, mutation_rate, nprods, top_constraints):
+    """
+    Mutation function. Works like crossover, but with the opportunity for
+    genes to randomly be changed.
+
+    Parameters
+    ----------
+    pop : TYPE
+        DESCRIPTION.
+    n_mutated : TYPE
+        DESCRIPTION.
+    mutation_rate : TYPE
+        DESCRIPTION.
+    nprods : TYPE
+        DESCRIPTION.
+    top_constraints : TYPE
+        DESCRIPTION.
+
+    Returns
+    -------
+    TYPE
+        DESCRIPTION.
+
+    """
     print("Entering mutation phase...creating children from crossover")
     offspring = np.zeros((n_mutated, pop.shape[1]))
     for i in range(n_mutated):
@@ -224,6 +270,37 @@ def mutation(pop, n_mutated, mutation_rate, nprods, top_constraints):
 # Create some amount of offspring Q by adding fixed coordinate displacement to some 
 # randomly selected parent's genes/coordinates
 def local_search(pop, n_searched, localsearch_rate, fliprate, perturbrate, maxmag, typerate, nprods, top_constraints):
+    """
+    Create offspring by adding coordinate displacement to randomly selected
+    genes in parent designs.
+
+    Parameters
+    ----------
+    pop : TYPE
+        DESCRIPTION.
+    n_searched : int
+        Number of designs to perform local search on.
+    localsearch_rate : TYPE
+        DESCRIPTION.
+    fliprate : TYPE
+        DESCRIPTION.
+    perturbrate : TYPE
+        DESCRIPTION.
+    maxmag : float
+        DESCRIPTION.
+    typerate : TYPE
+        DESCRIPTION.
+    nprods : int
+        Number of possible pressure rods in the design.
+    top_constraints : TYPE
+        DESCRIPTION.
+
+    Returns
+    -------
+    TYPE
+        DESCRIPTION.
+
+    """
     print("Entering local search phase...creating altered versions of other chromosomes")
     offspring = np.zeros((n_searched, pop.shape[1]))
     for i in range(n_searched):
@@ -416,7 +493,39 @@ def local_search(pop, n_searched, localsearch_rate, fliprate, perturbrate, maxma
 
 # Calculate fitness (obj function) values for each chromosome/solution
 def evaluation(pop, nobjs, gen, nprods, inputfile, constraint_geom):
+    """
+    Run FEA on the current generation and retrieve the results.
+
+    Parameters
+    ----------
+    pop : TYPE
+        DESCRIPTION.
+    nobjs : int
+        Number of design objective functions.
+    gen : int
+        Generation number.
+    nprods : int
+        Number of pressure rods in the design.
+    inputfile : str (filepath)
+        Filepath of the input XML file.
+    constraint_geom : TYPE
+        DESCRIPTION.
+
+    Raises
+    ------
+    Exception
+        DESCRIPTION.
+    FileNotFoundError
+        DESCRIPTION.
+
+    Returns
+    -------
+    fitness_values : TYPE
+        DESCRIPTION.
+
+    """
     # fitness_values = np.zeros((pop.shape[0], nobjs))
+    evaluation_start = datetime.now()
     
     # Read in constraint_geom (output of constraints.get_constraint_geometry())
     root = constraint_geom[0]
@@ -449,20 +558,84 @@ def evaluation(pop, nobjs, gen, nprods, inputfile, constraint_geom):
     for i, valid_design in enumerate(valid_circles):
         xml_filenames.append(constraints.design_to_xml(valid_design, df_PressureRods, root, inputfile, gen, i))
         
+    print("Running FEA")
+        
     pool = multiprocessing.Pool(processes=ncpus)
     # arg_tuples = [(xml_filenames[i]) for i in range(pop.shape[0])]
     arg_tuples = [(valid_circles[i], df_PressureRods, root, inputfile, gen, i) for i in range(pop.shape[0])]
     # arg_tuples = [(valid_circles[i], df_PressureRods, root, xml_filenames[i], gen, i) for i in range(pop.shape[0])]
-    # results_mp = pool.starmap(constraints.runFEA_new_path, arg_tuples)  # FIXME: runFEA_valid_circles is designed to reuse FEA.xml, not write a new version to include the new parameters. This probably causes issues with running multiple at the same time.
-    results_mp = pool.starmap(constraints.runFEA_valid_circles, arg_tuples)  # FIXME: runFEA_valid_circles is designed to reuse FEA.xml, not write a new version to include the new parameters. This probably causes issues with running multiple at the same time.
+    # results_mp = pool.starmap(constraints.runFEA_new_path, arg_tuples)
+    results_mp = pool.starmap(constraints.runFEA_valid_circles, arg_tuples)
     pool.close()
     pool.join()
     
-    # Retrieve the FEA results
+    
+    # Add verification here that all output files have been created. If any have not been created, run those FEA cases specifically.
+    time.sleep(60)
+    while True:
+        # Get directory to search for output
+        path, filename = os.path.split(inputfile)
+        output_dir = path + "/Output"
+        missing_iterations = []
+        for i in range(pop.shape[0]):
+            # Check if a results file has been created for each iteration in the
+            # current generation since evaluation_start
+            output_substring = f"FEA_GEN{gen}_ITER{i}"
+            latest_folder = runFEA.find_latest_folder_with_substring(output_dir, output_substring)
+            if is_folder_created_after_input_time(latest_folder, evaluation_start):
+                # Check if FEA_MeshNodes.csv exists
+                meshnodes_file = latest_folder + "/FEA_MeshNodes.csv"
+                if not os.path.exists(meshnodes_file):
+                    missing_iterations.append(i)
+                    
+            else:
+                raise Exception("FEA output folder found was not created after the current generation start time")
+        
+        for i in missing_iterations:
+            print(f"Rerun of FEA_GEN{gen}_ITER{i}")
+            constraints.runFEA_valid_circles(valid_circles[i], df_PressureRods, root, inputfile, gen, i)
+        
+        # If there are no missing iterations, exit the loop
+        if not missing_iterations:
+            break
+    
+    # Once all the FEA cases have been accounted for, retrieve results
     results = []
     for i in range(pop.shape[0]):
-        results.append(constraints.read_FEA_results(root, inputfile, gen, i))    
+        results.append(constraints.read_FEA_results(root, inputfile, gen, i))
     
+    # # Retrieve the FEA results
+    # time.sleep(5*60)
+    # time_to_wait = 5*60
+    # print("Retrieving fitness results")
+    # results = []
+    # for i in range(pop.shape[0]):
+    #     try:
+    #         results.append(constraints.read_FEA_results(root, inputfile, gen, i))
+    #     except:
+    #         # Check if new_path exists
+    #         new_filename = f"FEA_GEN{gen}_ITER{i}.xml"
+    #         path, filename = os.path.split(inputfile)
+    #         new_path = path + "/" + new_filename
+    #         time_counter = 0
+    #         while not os.path.exists(new_path):
+    #             print(f"No results file found for {new_filename}")
+    #             time.sleep(1)
+    #             time_counter += 1
+    #             if time_counter > time_to_wait:
+    #                 print(f"\nERROR: RAN OUT OF TIME WAITING FOR RESULT FROM {new_filename}\n")
+    #                 # raise FileNotFoundError(f"No such file or directory: {new_path}")
+                    
+    #                 constraints.runFEA_valid_circles(valid_circles[i], df_PressureRods, root, inputfile, gen, i)
+    #                 time_counter = 0
+    #                 continue
+                
+    #         results.append(constraints.read_FEA_results(root, inputfile, gen, i))
+            
+            
+            
+            
+            
     fitness_values = np.array(results)
     # fitness_values = np.array(results_mp)
     # fitness_values = np.asarray(list(zip(*results_mp)))
@@ -480,11 +653,56 @@ def evaluation(pop, nobjs, gen, nprods, inputfile, constraint_geom):
     return fitness_values
 
 
-# Estimate how tightly clumped fitness values are on Pareto front. 
+def is_folder_created_after_input_time(folder_name, input_time):
+    """
+    Utility function for checking if an FEA output folder was created after
+    a reference input_time.
+
+    Parameters
+    ----------
+    folder_name : str (filepath)
+        Full path of folder that is being checked. Should contain a timestamp
+        within the name in the format %Y%m%d-%H%M
+    input_time : datetime.datetime
+        Reference time.
+
+    Returns
+    -------
+    bool
+        Returns True if the folder timestamp is greater than the reference
+        input time, and False if the folder timestamp is less than the
+        reference input time.
+
+    """
+    # Extract the timestamp from the folder name
+    timestamp_str = folder_name.split('_')[-1]
+
+    # Convert the timestamp string to a datetime object
+    folder_timestamp = datetime.strptime(timestamp_str, '%Y%m%d-%H%M')
+    
+    rounded_input_time = input_time.replace(second=0, microsecond=0)
+
+    # Compare the folder timestamp with the input time
+    return folder_timestamp >= rounded_input_time
+
 def crowding_calculation(fitness_values):
+    """
+    Estimate how tightly clumped fitness values are on the Pareto front.
+
+    Parameters
+    ----------
+    fitness_values : TYPE
+        DESCRIPTION.
+
+    Returns
+    -------
+    TYPE
+        DESCRIPTION.
+
+    """
     pop_size = len(fitness_values[:, 0])
     fitness_value_number = len(fitness_values[0, :])                    # == n of objective functions
-    matrix_for_crowding = np.zeros((pop_size, fitness_value_number))    # arr(pop_size x 2) 
+    matrix_for_crowding = np.zeros((pop_size, fitness_value_number))
     normalized_fitness_values = (fitness_values - fitness_values.min(0))/fitness_values.ptp(0)  # arr.ptp(0) array of max elem in each col
     
     for i in range(fitness_value_number):
@@ -502,9 +720,24 @@ def crowding_calculation(fitness_values):
 
     return crowding_distance    # arr(pop_size,)
 
-# Crowding distance is used to maintain diversity of solutions on Pareto front. 
-# Remove some amount of solutions that are clumped together to much
 def remove_using_crowding(fitness_values, number_solutions_needed):
+    """
+    Uses crowding distance to maintain diversity of solutions on Pareto front
+    by removing solutions that are too close together.
+
+    Parameters
+    ----------
+    fitness_values : TYPE
+        DESCRIPTION.
+    number_solutions_needed : TYPE
+        DESCRIPTION.
+
+    Returns
+    -------
+    TYPE
+        DESCRIPTION.
+
+    """
     pop_index = np.arange(fitness_values.shape[0])
     crowding_distance = crowding_calculation(fitness_values)
     selected_pop_index = np.zeros(number_solutions_needed)
@@ -532,8 +765,23 @@ def remove_using_crowding(fitness_values, number_solutions_needed):
 
     return selected_pop_index   # arr(n_sol_needed,)
 
-# find indices of solutions that dominate others
 def pareto_front_finding(fitness_values, pop_index):
+    """
+    Find indices of solutions that dominate others.
+
+    Parameters
+    ----------
+    fitness_values : TYPE
+        DESCRIPTION.
+    pop_index : TYPE
+        DESCRIPTION.
+
+    Returns
+    -------
+    TYPE
+        DESCRIPTION.
+
+    """
     pop_size = fitness_values.shape[0]
     pareto_front = np.ones(pop_size, dtype=bool)    # all True initially
     for i in range(pop_size):
@@ -544,8 +792,25 @@ def pareto_front_finding(fitness_values, pop_index):
 
     return pop_index[pareto_front]  # arr(len_pareto_front,)
 
-# repeat Pareto front selection to build a population within defined size limits
 def selection(pop, fitness_values, pop_size):
+    """
+    Pareto front selection.
+
+    Parameters
+    ----------
+    pop : TYPE
+        DESCRIPTION.
+    fitness_values : TYPE
+        DESCRIPTION.
+    pop_size : TYPE
+        DESCRIPTION.
+
+    Returns
+    -------
+    TYPE
+        DESCRIPTION.
+
+    """
     
     pop_index_0 = np.arange(pop.shape[0])   # unselected pop ids
     pop_index = np.arange(pop.shape[0])     # all pop ids. len = len(pop_size)
@@ -570,6 +835,19 @@ def selection(pop, fitness_values, pop_size):
     return selected_pop     # arr(pop_size x n_var)
 
 def main_optimization():
+    """
+    Main function for running optimization.
+
+    Returns
+    -------
+    fitness_values : TYPE
+        DESCRIPTION.
+    best_fitnesses : TYPE
+        DESCRIPTION.
+    pop : TYPE
+        DESCRIPTION.
+
+    """
     start_time = time.time()
     # Initial setup
     print("Initial setup - reading in constraints")
@@ -602,21 +880,23 @@ def main_optimization():
     # lb = [-5, -5, -5]
     # ub = [5, 5, 5]
     print("Setting genetic algorithm parameters")
-    pop_size = 8              # initial number of chromosomes
-    rate_crossover = 2         # number of chromosomes that we apply crossover to
-    rate_mutation = 2          # number of chromosomes that we apply mutation to
+    pop_size = 10              # initial number of chromosomes
+    rate_crossover = 3         # number of chromosomes that we apply crossover to
+    rate_mutation = 3          # number of chromosomes that we apply mutation to
     chance_mutation = 0.3       # normalized percent chance that an individual pressure rod will be mutated
-    n_searched = 2      # number of chromosomes that we apply local_search to
+    n_searched = 3      # number of chromosomes that we apply local_search to
     chance_localsearch = 0.5
     fliprate = 0.3
     perturbrate = 1.0
     maxmag = 0.1             # coordinate displacement during local_search
     typerate = 0.3
-    maximum_generation = 10    # number of iterations
+    maximum_generation = 15    # number of iterations
     nobjs = 4
     
     # nprods = 64
-    nprods = 30
+    nprods = 40
+    # nprods = nprods_small
+    # nprods = len(df_PressureRods)
     # nprods = np.max([len(df_PressureRods), nprods_small, nprods_large])
     print("Creating initial random population")
     pop = constraints.initialize_population_simple(pop_size, nprods, pBoards, pComponentsTop, df_Probes, pBoards_diff)    # initial parents population P
