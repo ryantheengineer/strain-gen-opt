@@ -103,11 +103,11 @@ def crossover_prods(pop, crossover_rate, nprods, top_constraints):
         child_chromosome = constraints.interpret_prods_to_chromosome(child_prods)
         offspring[i, :] = child_chromosome
         
-        # # Plot the parent and child designs for examination
-        # constraints.plot_prods_top_constraints(parent1_prods, top_constraints, f"Offspring {i}: Parent 1")
-        # constraints.plot_prods_top_constraints(parent2_prods, top_constraints, f"Offspring {i}: Parent 2")
-        # constraints.plot_prods_top_constraints(child_prods, top_constraints, f"Offspring {i}: Child")
-        # plt.show()
+        # Plot the parent and child designs for examination
+        constraints.plot_prods_top_constraints(parent1_prods, top_constraints, f"Offspring {i}: Parent 1")
+        constraints.plot_prods_top_constraints(parent2_prods, top_constraints, f"Offspring {i}: Parent 2")
+        constraints.plot_prods_top_constraints(child_prods, top_constraints, f"Offspring {i}: Child")
+        plt.show()
         
     return offspring
 
@@ -259,11 +259,11 @@ def mutation(pop, n_mutated, mutation_rate, nprods, top_constraints):
         child_chromosome = constraints.interpret_prods_to_chromosome(child_prods)
         offspring[i, :] = child_chromosome
         
-        # # Plot the parent and child designs for examination
-        # constraints.plot_prods_top_constraints(parent1_prods, top_constraints, f"Offspring {i}: Parent 1")
-        # constraints.plot_prods_top_constraints(parent2_prods, top_constraints, f"Offspring {i}: Parent 2")
-        # constraints.plot_prods_top_constraints(child_prods, top_constraints, f"Offspring {i}: Child (mutated)")
-        # plt.show()
+        # Plot the parent and child designs for examination
+        constraints.plot_prods_top_constraints(parent1_prods, top_constraints, f"Offspring {i}: Parent 1")
+        constraints.plot_prods_top_constraints(parent2_prods, top_constraints, f"Offspring {i}: Parent 2")
+        constraints.plot_prods_top_constraints(child_prods, top_constraints, f"Offspring {i}: Child (mutated)")
+        plt.show()
 
     return offspring    # arr(mutation_size x n_var)
 
@@ -559,7 +559,11 @@ def evaluation(pop, nobjs, gen, nprods, inputfile, constraint_geom):
         xml_filenames.append(constraints.design_to_xml(valid_design, df_PressureRods, root, inputfile, gen, i))
         
     print("Running FEA")
-        
+    
+    # # Straight calculation version
+    # results_mp = [constraints.runFEA_valid_circles(valid_circles[i], df_PressureRods, root, inputfile, gen, i) for i in range(pop.shape[0])]
+    
+    # Multiprocessing version
     pool = multiprocessing.Pool(processes=ncpus)
     # arg_tuples = [(xml_filenames[i]) for i in range(pop.shape[0])]
     arg_tuples = [(valid_circles[i], df_PressureRods, root, inputfile, gen, i) for i in range(pop.shape[0])]

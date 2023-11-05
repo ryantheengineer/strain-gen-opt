@@ -40,8 +40,16 @@ def loadFEApath(filename):
     return FEApath
 
 def runFEA(FEApath, inputfile):
-    args = [FEApath, inputfile, "/noprogressbar"]
-    subprocess.call(args, shell=False)
+    directory = pathlib.Path(inputfile)
+    directory = str(directory.parent) + "\Output"
+    args = [FEApath, f"/input {inputfile}", f"/output {directory}", "/noprogressbar"]
+    exit_code = subprocess.call(args, shell=False)
+    if exit_code == 0:
+        print(f"{inputfile} ran successfully")
+    else:
+        print(f"{inputfile} failed with code {exit_code}")
+    return exit_code
+      
 
 def find_latest_folder_with_substring(base_dir, substring):
     latest_folder = None

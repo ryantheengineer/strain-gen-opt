@@ -330,7 +330,7 @@ class PressureRod():
     def update_pressure_rod(self, new_x, new_y, new_rod_type, new_on):
         self.x = new_x
         self.y = new_y
-        self.center = Point(self.x, self.y)
+        self.center = Point(new_x, new_y)
         self.select_rod_type(new_rod_type)
         self.rtip = self.dtip/2.0
         self.rtop = self.dtop/2.0
@@ -474,8 +474,10 @@ def create_chromosome(nprods, pBoards, pComponentsTop, df_Probes, pBoards_diff):
         perturbing = False
         
         # Make sure pressure rod is within the UUT and make sure it doesn't intersect any components, using the appropriate buffer sizes
-        if not prod.center.within(pBoards_multi):
+        if not prod.center.intersects(pBoards_multi):
             continue
+        # if not prod.center.within(pBoards_multi):
+        #     continue
         
         ### TRYING MOVING AWAY FROM INTERSECTION VIOLATIONS TO SALVAGE DESIGN ###
         # Gather status of currently placed prod
@@ -553,6 +555,9 @@ def create_chromosome(nprods, pBoards, pComponentsTop, df_Probes, pBoards_diff):
                 # print(f"\n{topcomponent_intersection_area} intersection with top components")
                 # print(f"{top_probe_intersection_area} intersection with top probes")
                 
+                if not prod.center.intersects(pBoards_multi):
+                    valid = False
+                    continue                
                 if prod.tip_component_buffer.intersects(topcomponents):
                     valid = False
                     continue
@@ -663,25 +668,25 @@ def plot_prods_top_constraints(prods, top_constraints, title):
     # "On" pressure rods with offsets
     prods_poly_list_on = [prod.tip for prod in prods if prod.on]
     prods_tip_component_buffer_on = [prod.tip_component_buffer for prod in prods if prod.on]
-    # prods_tip_UUT_buffer_on = [prod.tip_UUT_buffer for prod in prods if prod.on]
+    prods_tip_UUT_buffer_on = [prod.tip_UUT_buffer for prod in prods if prod.on]
     prods_tip_from_top_probe_buffer_on = [prod.tip_from_top_probe_buffer for prod in prods if prod.on]
     linestyle = '-'
     label = "Pressure Rods - On"
     plot_poly_list_w_holes(prods_poly_list_on, fig, ax, 'g', linestyle, label)
-    # plot_poly_list_w_holes(prods_tip_UUT_buffer_on, fig, ax, 'lime', linestyle, label)
+    plot_poly_list_w_holes(prods_tip_UUT_buffer_on, fig, ax, 'lime', linestyle, label)
     plot_poly_list_w_holes(prods_tip_component_buffer_on, fig, ax, 'turquoise', linestyle, label)
     plot_poly_list_w_holes(prods_tip_from_top_probe_buffer_on, fig, ax, 'teal', linestyle, label)
     
     # "Off pressure rods with offsets
     prods_poly_list_off = [prod.tip for prod in prods if not prod.on]
     prods_tip_component_buffer_off = [prod.tip_component_buffer for prod in prods if not prod.on]
-    # prods_tip_UUT_buffer_off = [prod.tip_UUT_buffer for prod in prods if not prod.on]
+    prods_tip_UUT_buffer_off = [prod.tip_UUT_buffer for prod in prods if not prod.on]
     prods_tip_from_top_probe_buffer_off = [prod.tip_from_top_probe_buffer for prod in prods if not prod.on]
     
     linestyle = '-'
     label = "Pressure Rods - Off"
     plot_poly_list_w_holes(prods_poly_list_off, fig, ax, 'r', linestyle, label)
-    # plot_poly_list_w_holes(prods_tip_UUT_buffer_off, fig, ax, 'yellow', linestyle, label)
+    plot_poly_list_w_holes(prods_tip_UUT_buffer_off, fig, ax, 'yellow', linestyle, label)
     plot_poly_list_w_holes(prods_tip_component_buffer_off, fig, ax, 'gold', linestyle, label)
     plot_poly_list_w_holes(prods_tip_from_top_probe_buffer_off, fig, ax, 'darkorange', linestyle, label)
     
@@ -704,7 +709,7 @@ def validate_prod(prod, prods_chosen, top_constraints):
     # prod = PressureRod(x,y,rod_types[rod_type_i],on)
     while True:        
         # Make sure pressure rod is within the UUT and make sure it doesn't intersect any components, using the appropriate buffer sizes
-        if not prod.center.within(pBoards_multi):
+        if not prod.center.intersects(pBoards_multi):
             valid = False
             break
         if prod.tip_component_buffer.intersects(topcomponents):
@@ -927,7 +932,7 @@ def runFEA_valid_circles(valid_circles, df_PressureRods, root, inputfile, gen, i
     tree.write(new_path)
     
     FEApath = runFEA.loadFEApath('FEApath.pk')
-    runFEA.runFEA(FEApath, new_path)
+    exit_code = runFEA.runFEA(FEApath, new_path)
     
     # time.sleep(12)
     # # time_to_wait = 3*60
