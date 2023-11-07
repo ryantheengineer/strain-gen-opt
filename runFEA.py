@@ -40,16 +40,25 @@ def loadFEApath(filename):
     return FEApath
 
 def runFEA(FEApath, inputfile):
-    directory = pathlib.Path(inputfile)
-    directory = str(directory.parent) + "\Output"
-    args = [FEApath, f"/input {inputfile}", f"/output {directory}", "/noprogressbar"]
-    exit_code = subprocess.call(args, shell=False)
-    if exit_code == 0:
+    # directory = pathlib.Path(inputfile)
+    # directory = str(directory.parent) + "\Output"
+    # args = [FEApath, f"/input {inputfile}", "/noprogressbar"]
+    # # args = [FEApath, f"/input {inputfile}", f"/output {directory}", "/noprogressbar"]
+    # exit_code = subprocess.call(args, shell=False)
+    # if exit_code == 0:
+    #     print(f"{inputfile} ran successfully")
+    # else:
+    #     print(f"{inputfile} failed with code {exit_code}")
+    # return exit_code
+      
+    args = f'/input "{inputfile}" /noprogressbar'
+    command = f'"{FEApath}" {args}'
+    result = subprocess.run(command)
+    if result.returncode == 0:
         print(f"{inputfile} ran successfully")
     else:
-        print(f"{inputfile} failed with code {exit_code}")
-    return exit_code
-      
+        print(f"{inputfile} failed with code {result.returncode}")
+    return result.returncode
 
 def find_latest_folder_with_substring(base_dir, substring):
     latest_folder = None
@@ -93,13 +102,14 @@ def resultsToDataframe(inputfile):
 def getFitness(dfmesh):
     # abssums = dfmesh.abs().sum()
     # absmeans = dfmesh.abs().mean()
-    absmeans = dfmesh.abs().max()
+    absmax = dfmesh.abs().max()
     # stdevs = dfmesh.std()
-    strain_xx = absmeans["strain_xx"]
-    strain_yy = absmeans["strain_yy"]
-    strain_xy = absmeans["strain_xy"]
-    principalStrain_min = absmeans["principalStrain_min"]
-    principalStrain_max = absmeans["principalStrain_max"]
+    strain_xx = absmax["strain_xx"]
+    strain_yy = absmax["strain_yy"]
+    strain_xy = absmax["strain_xy"]
+    
+    principalStrain_min = absmax["principalStrain_min"]
+    principalStrain_max = absmax["principalStrain_max"]
     return strain_xx, strain_yy, strain_xy, principalStrain_min, principalStrain_max
     
 

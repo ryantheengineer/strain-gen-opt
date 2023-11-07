@@ -764,7 +764,7 @@ def initialize_population_multiprocessing(nchromosomes, nprods, pBoards, pCompon
     # Create and start worker processes
     processes = []
     for _ in range(num_processes):
-        process = multiprocessing.Process(target=worker_function, args=(result_queue,nprods,pBoards, pComponentsTop, df_Probes, pBoards_diff))
+        process = multiprocessing.Process(target=worker_function, args=(result_queue, nprods,pBoards, pComponentsTop, df_Probes, pBoards_diff))
         process.start()
         processes.append(process)
         

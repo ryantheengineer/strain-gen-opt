@@ -880,9 +880,6 @@ def main_optimization():
     top_constraints = constraints.get_top_constraints(pBoards, pComponentsTop, df_Probes, pBoards_diff)
     
     # Parameters
-    # n_var = 3                   # chromosome has 3 coordinates/genes
-    # lb = [-5, -5, -5]
-    # ub = [5, 5, 5]
     print("Setting genetic algorithm parameters")
     pop_size = 10              # initial number of chromosomes
     rate_crossover = 3         # number of chromosomes that we apply crossover to
@@ -921,7 +918,6 @@ def main_optimization():
         pop = np.append(pop, offspring_from_crossover, axis=0)
         pop = np.append(pop, offspring_from_mutation, axis=0)
         pop = np.append(pop, offspring_from_local_search, axis=0)
-        # print(pop.shape)
         print("Evaluating fitnesses...")
         fitness_values = evaluation(pop, nobjs, i, nprods, inputfile, constraint_geom)
         j = fitness_values[:,0].argmin()
