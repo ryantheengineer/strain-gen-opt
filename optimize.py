@@ -103,11 +103,11 @@ def crossover_prods(pop, crossover_rate, nprods, top_constraints):
         child_chromosome = constraints.interpret_prods_to_chromosome(child_prods)
         offspring[i, :] = child_chromosome
         
-        # Plot the parent and child designs for examination
-        constraints.plot_prods_top_constraints(parent1_prods, top_constraints, f"Offspring {i}: Parent 1")
-        constraints.plot_prods_top_constraints(parent2_prods, top_constraints, f"Offspring {i}: Parent 2")
-        constraints.plot_prods_top_constraints(child_prods, top_constraints, f"Offspring {i}: Child")
-        plt.show()
+        # # Plot the parent and child designs for examination
+        # constraints.plot_prods_top_constraints(parent1_prods, top_constraints, f"Offspring {i}: Parent 1")
+        # constraints.plot_prods_top_constraints(parent2_prods, top_constraints, f"Offspring {i}: Parent 2")
+        # constraints.plot_prods_top_constraints(child_prods, top_constraints, f"Offspring {i}: Child")
+        # plt.show()
         
     return offspring
 
@@ -259,11 +259,11 @@ def mutation(pop, n_mutated, mutation_rate, nprods, top_constraints):
         child_chromosome = constraints.interpret_prods_to_chromosome(child_prods)
         offspring[i, :] = child_chromosome
         
-        # Plot the parent and child designs for examination
-        constraints.plot_prods_top_constraints(parent1_prods, top_constraints, f"Offspring {i}: Parent 1")
-        constraints.plot_prods_top_constraints(parent2_prods, top_constraints, f"Offspring {i}: Parent 2")
-        constraints.plot_prods_top_constraints(child_prods, top_constraints, f"Offspring {i}: Child (mutated)")
-        plt.show()
+        # # Plot the parent and child designs for examination
+        # constraints.plot_prods_top_constraints(parent1_prods, top_constraints, f"Offspring {i}: Parent 1")
+        # constraints.plot_prods_top_constraints(parent2_prods, top_constraints, f"Offspring {i}: Parent 2")
+        # constraints.plot_prods_top_constraints(child_prods, top_constraints, f"Offspring {i}: Child (mutated)")
+        # plt.show()
 
     return offspring    # arr(mutation_size x n_var)
 
@@ -576,84 +576,68 @@ def evaluation(pop, nobjs, gen, nprods, inputfile, constraint_geom):
     
     # Add verification here that all output files have been created. If any have not been created, run those FEA cases specifically.
     time.sleep(60)
+    
     while True:
         # Get directory to search for output
         path, filename = os.path.split(inputfile)
-        output_dir = path + "/Output"
+        output_dir = os.path.join(path, "Output")
         missing_iterations = []
         for i in range(pop.shape[0]):
             # Check if a results file has been created for each iteration in the
             # current generation since evaluation_start
             output_substring = f"FEA_GEN{gen}_ITER{i}"
-            latest_folder = runFEA.find_latest_folder_with_substring(output_dir, output_substring)
-            if is_folder_created_after_input_time(latest_folder, evaluation_start):
-                # Check if FEA_MeshNodes.csv exists
-                meshnodes_file = latest_folder + "/FEA_MeshNodes.csv"
-                if not os.path.exists(meshnodes_file):
-                    missing_iterations.append(i)
-                    
-            else:
-                raise Exception("FEA output folder found was not created after the current generation start time")
-        
+            folders = [d for d in os.listdir(output_dir) if os.path.isdir(os.path.join(output_dir, d))]
+    
+            for folder in folders:
+                if output_substring in folder and is_folder_created_after_input_time(os.path.join(output_dir, folder), evaluation_start):
+                    # Check if FEA_MeshNodes.csv exists
+                    meshnodes_file = os.path.join(output_dir, folder, "FEA_MeshNodes.csv")
+                    if not os.path.exists(meshnodes_file):
+                        missing_iterations.append(i)
+                    break  # Exit the loop after the first successful folder
+    
         for i in missing_iterations:
             print(f"Rerun of FEA_GEN{gen}_ITER{i}")
             constraints.runFEA_valid_circles(valid_circles[i], df_PressureRods, root, inputfile, gen, i)
-        
+    
         # If there are no missing iterations, exit the loop
         if not missing_iterations:
             break
+    
+    # while True:
+    #     # Get directory to search for output
+    #     path, filename = os.path.split(inputfile)
+    #     output_dir = path + "/Output"
+    #     missing_iterations = []
+    #     for i in range(pop.shape[0]):
+    #         # Check if a results file has been created for each iteration in the
+    #         # current generation since evaluation_start
+    #         output_substring = f"FEA_GEN{gen}_ITER{i}"
+    #         latest_folder = runFEA.find_latest_folder_with_substring(output_dir, output_substring)
+    #         if is_folder_created_after_input_time(latest_folder, evaluation_start):
+    #             # Check if FEA_MeshNodes.csv exists
+    #             meshnodes_file = latest_folder + "/FEA_MeshNodes.csv"
+    #             if not os.path.exists(meshnodes_file):
+    #                 missing_iterations.append(i)
+                    
+    #         else:
+    #             raise Exception("FEA output folder found was not created after the current generation start time")
+        
+    #     for i in missing_iterations:
+    #         print(f"Rerun of FEA_GEN{gen}_ITER{i}")
+    #         constraints.runFEA_valid_circles(valid_circles[i], df_PressureRods, root, inputfile, gen, i)
+        
+    #     # If there are no missing iterations, exit the loop
+    #     if not missing_iterations:
+    #         break
     
     # Once all the FEA cases have been accounted for, retrieve results
     results = []
     for i in range(pop.shape[0]):
         results.append(constraints.read_FEA_results(root, inputfile, gen, i))
     
-    # # Retrieve the FEA results
-    # time.sleep(5*60)
-    # time_to_wait = 5*60
-    # print("Retrieving fitness results")
-    # results = []
-    # for i in range(pop.shape[0]):
-    #     try:
-    #         results.append(constraints.read_FEA_results(root, inputfile, gen, i))
-    #     except:
-    #         # Check if new_path exists
-    #         new_filename = f"FEA_GEN{gen}_ITER{i}.xml"
-    #         path, filename = os.path.split(inputfile)
-    #         new_path = path + "/" + new_filename
-    #         time_counter = 0
-    #         while not os.path.exists(new_path):
-    #             print(f"No results file found for {new_filename}")
-    #             time.sleep(1)
-    #             time_counter += 1
-    #             if time_counter > time_to_wait:
-    #                 print(f"\nERROR: RAN OUT OF TIME WAITING FOR RESULT FROM {new_filename}\n")
-    #                 # raise FileNotFoundError(f"No such file or directory: {new_path}")
-                    
-    #                 constraints.runFEA_valid_circles(valid_circles[i], df_PressureRods, root, inputfile, gen, i)
-    #                 time_counter = 0
-    #                 continue
-                
-    #         results.append(constraints.read_FEA_results(root, inputfile, gen, i))
-            
-            
-            
-            
-            
     fitness_values = np.array(results)
-    # fitness_values = np.array(results_mp)
-    # fitness_values = np.asarray(list(zip(*results_mp)))
-        
-        # # FIXME: Need code to translate chromosomes into designs, then run FEA
-        # prods = constraints.interpret_chromosome_to_prods(chromosome, nprods)
-        # valid_circles = constraints.prods_to_valid_circles(prods)
-        # strain_xx, strain_yy, strain_xy, principalStrain_min, principalStrain_max = constraints.runFEA_valid_circles(valid_circles, df_PressureRods, root, inputfile, gen, i)
-        
-        # fitness_values[i,0] = strain_xx
-        # fitness_values[i,1] = strain_yy
-        # fitness_values[i,2] = strain_xy
-        # fitness_values[i,3] = principalStrain_min + principalStrain_max
-
+    
     return fitness_values
 
 
@@ -881,11 +865,11 @@ def main_optimization():
     
     # Parameters
     print("Setting genetic algorithm parameters")
-    pop_size = 10              # initial number of chromosomes
-    rate_crossover = 3         # number of chromosomes that we apply crossover to
-    rate_mutation = 3          # number of chromosomes that we apply mutation to
+    pop_size = 20              # initial number of chromosomes
+    rate_crossover = 5         # number of chromosomes that we apply crossover to
+    rate_mutation = 5          # number of chromosomes that we apply mutation to
     chance_mutation = 0.3       # normalized percent chance that an individual pressure rod will be mutated
-    n_searched = 3      # number of chromosomes that we apply local_search to
+    n_searched = 5      # number of chromosomes that we apply local_search to
     chance_localsearch = 0.5
     fliprate = 0.3
     perturbrate = 1.0
@@ -895,10 +879,13 @@ def main_optimization():
     nobjs = 4
     
     # nprods = 64
-    nprods = 40
+    nprods = 50
     # nprods = nprods_small
     # nprods = len(df_PressureRods)
     # nprods = np.max([len(df_PressureRods), nprods_small, nprods_large])
+    
+    design_accepted = False     # Flag for deciding whether to end optimization early if criteria are met
+    
     print("Creating initial random population")
     pop = constraints.initialize_population_simple(pop_size, nprods, pBoards, pComponentsTop, df_Probes, pBoards_diff)    # initial parents population P
     pop = np.asarray(pop)
@@ -941,6 +928,33 @@ def main_optimization():
         ax.set_ylabel('x2')
         ax.set_title(f"Generation: {i}")
         plt.show()
+        
+        # If the best fitness for each of the first three strain parameters 
+        # are less than 500 microstrain, then end the optimization early
+        if not design_accepted:
+            if (best_fitnesses_1[-1]<=500.) and (best_fitnesses_2[-1]<=500.) and (best_fitnesses_3[-1]<=500.):
+                print("\nDesign found that meets minimum standard for strain:")
+                print(f"Strain_xx: {best_fitnesses_1[-1]}")
+                print(f"Strain_yy: {best_fitnesses_1[-2]}")
+                print(f"Strain_xy: {best_fitnesses_1[-3]}")
+                
+                while True:
+                    continue_optimizing = input("\nAccept best design and end optimization early? Y/N")
+                    if continue_optimizing.lower() == "y":
+                        print("Designs accepted. Ending optimization")
+                        design_accepted = True
+                        break
+                    elif continue_optimizing.lower() == "n":
+                        print(f"Designs not accepted. Continuing optimization until the prescribed {maximum_generation} generations are complete.")
+                        design_accepted = False
+                        break
+                    else:
+                        print("Please enter Y or N to continue.")
+                        continue
+        
+        if design_accepted:
+            break
+        
         # fig = plt.figure(dpi=300)
         # ax = fig.add_subplot(projection='3d')
         # for j in range(len(pop)):
