@@ -211,9 +211,13 @@ def mutation(pop, n_mutated, mutation_rate, nprods, top_constraints):
                             on = random.randint(0,1)
                             prod_new = constraints.PressureRod(x,y,rod_types[rod_type_i],on)
                             # Make sure pressure rod is within the UUT and make sure it doesn't intersect any components, using the appropriate buffer sizes
-                            if not prod_new.tip_UUT_buffer.within(pBoards_multi):
+                            if not prod_new.center.intersects(pBoards_multi):
                                 valid = False
-                                break
+                                break           
+                            
+                            # if not prod_new.tip_UUT_buffer.within(pBoards_multi):
+                              #  valid = False
+                              #  break
                             if prod_new.tip_component_buffer.intersects(topcomponents):
                                 valid = False
                                 break
@@ -394,9 +398,12 @@ def local_search(pop, n_searched, localsearch_rate, fliprate, perturbrate, maxma
                                     
                                     # Validate the perturbation here
                                     # Make sure pressure rod is within the UUT and make sure it doesn't intersect any components, using the appropriate buffer sizes
-                                    if not child_prods[j].tip_UUT_buffer.within(pBoards_multi):
+                                    if not child_prods[j].center.intersects(pBoards_multi):
                                         valid = False
                                         break
+                                    # if not child_prods[j].tip_UUT_buffer.within(pBoards_multi):
+                                    #     valid = False
+                                    #     break
                                     if child_prods[j].tip_component_buffer.intersects(topcomponents):
                                         valid = False
                                         break
