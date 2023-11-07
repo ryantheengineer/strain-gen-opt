@@ -103,11 +103,11 @@ def crossover_prods(pop, crossover_rate, nprods, top_constraints):
         child_chromosome = constraints.interpret_prods_to_chromosome(child_prods)
         offspring[i, :] = child_chromosome
         
-        # # Plot the parent and child designs for examination
-        # constraints.plot_prods_top_constraints(parent1_prods, top_constraints, f"Offspring {i}: Parent 1")
-        # constraints.plot_prods_top_constraints(parent2_prods, top_constraints, f"Offspring {i}: Parent 2")
-        # constraints.plot_prods_top_constraints(child_prods, top_constraints, f"Offspring {i}: Child")
-        # plt.show()
+        # Plot the parent and child designs for examination
+        constraints.plot_prods_top_constraints(parent1_prods, top_constraints, f"Offspring {i}: Parent 1")
+        constraints.plot_prods_top_constraints(parent2_prods, top_constraints, f"Offspring {i}: Parent 2")
+        constraints.plot_prods_top_constraints(child_prods, top_constraints, f"Offspring {i}: Child")
+        plt.show()
         
     return offspring
 
@@ -259,11 +259,11 @@ def mutation(pop, n_mutated, mutation_rate, nprods, top_constraints):
         child_chromosome = constraints.interpret_prods_to_chromosome(child_prods)
         offspring[i, :] = child_chromosome
         
-        # # Plot the parent and child designs for examination
-        # constraints.plot_prods_top_constraints(parent1_prods, top_constraints, f"Offspring {i}: Parent 1")
-        # constraints.plot_prods_top_constraints(parent2_prods, top_constraints, f"Offspring {i}: Parent 2")
-        # constraints.plot_prods_top_constraints(child_prods, top_constraints, f"Offspring {i}: Child (mutated)")
-        # plt.show()
+        # Plot the parent and child designs for examination
+        constraints.plot_prods_top_constraints(parent1_prods, top_constraints, f"Offspring {i}: Parent 1")
+        constraints.plot_prods_top_constraints(parent2_prods, top_constraints, f"Offspring {i}: Parent 2")
+        constraints.plot_prods_top_constraints(child_prods, top_constraints, f"Offspring {i}: Child (mutated)")
+        plt.show()
 
     return offspring    # arr(mutation_size x n_var)
 
