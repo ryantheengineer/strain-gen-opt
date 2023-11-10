@@ -568,8 +568,9 @@ def create_chromosome(nprods, pBoards, pComponentsTop, df_Probes, pBoards_diff):
                 if valid == True:
                     break
                 
-            
-                
+        if not prod.center.intersects(pBoards_multi):
+            valid = False
+            continue
             
         
         
@@ -702,11 +703,6 @@ def validate_prod(prod, prods_chosen, top_constraints):
     xmin, ymin, xmax, ymax = pBoards_multi.bounds
     
     valid = True
-    # x = random.uniform(xmin,xmax)
-    # y = random.uniform(ymin,ymax)
-    # rod_type_i = random.randint(0,3)
-    # on = random.randint(0,1)
-    # prod = PressureRod(x,y,rod_types[rod_type_i],on)
     while True:        
         # Make sure pressure rod is within the UUT and make sure it doesn't intersect any components, using the appropriate buffer sizes
         if not prod.center.intersects(pBoards_multi):
@@ -934,20 +930,6 @@ def runFEA_valid_circles(valid_circles, df_PressureRods, root, inputfile, gen, i
     FEApath = runFEA.loadFEApath('FEApath.pk')
     exit_code = runFEA.runFEA(FEApath, new_path)
     
-    # time.sleep(12)
-    # # time_to_wait = 3*60
-    # # time_counter = 0
-    # # while not os.path.exists(new_path):
-    # #     time.sleep(1)
-    # #     time_counter += 1
-    # #     if time_counter > time_to_wait:
-    # #         raise FileNotFoundError(f"No such file or directory: {new_path}")
-    # dfmesh = runFEA.resultsToDataframe(new_path)
-    # # dfmesh = runFEA.resultsToDataframe(inputfile)
-    
-    # strain_xx, strain_yy, strain_xy, principalStrain_min, principalStrain_max = runFEA.getFitness(dfmesh)
-    
-    # results = (strain_xx, strain_yy, strain_xy, principalStrain_min, principalStrain_max)
     results = (gen, iteration)
     
     return results
