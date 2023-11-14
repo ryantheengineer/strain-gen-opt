@@ -17,6 +17,7 @@ import copy
 import os
 from datetime import datetime
 from shapely.geometry import Point
+from shapely.ops import nearest_points
 
 # MINIMIZATION
 
@@ -272,6 +273,29 @@ def mutation(pop, n_mutated, mutation_rate, nprods, top_constraints):
 
     return offspring    # arr(mutation_size x n_var)
 
+def check_available_perturb_simple(child_prod, top_constraints):
+    pBoards_multi = top_constraints[0]
+    top_probes = top_constraints[1]
+    topcomponents = top_constraints[2]
+    
+    closest_pBoards_multi = nearest_points(child_prod.center, pBoards_multi)
+    closest_top_probes = nearest_points(child_prod.center, top_probes)
+    closest_top_components = nearest_points(child_prod.center, topcomponents)
+    
+    dist_pBoards_multi = closest_pBoards_multi[0].distance(closest_pBoards_multi[1])
+    dist_top_probes = closest_top_probes[0].distance(closest_top_probes[1])
+    dist_top_components = closest_top_components[0].distance(closest_top_components[1])
+    
+    # Find the shortest distance
+    shortest_dist = min([dist_pBoards_multi, dist_top_probes, dist_top_components])
+    max_dist = shortest_dist - child_prod.tip_from_components
+    
+    if max_dist <= 0:
+        max_dist = np.abs(max_dist)
+        
+    return max_dist
+
+
 # Create some amount of offspring Q by adding fixed coordinate displacement to some 
 # randomly selected parent's genes/coordinates
 def local_search(pop, n_searched, localsearch_rate, fliprate, perturbrate, maxmag, typerate, nprods, top_constraints):
@@ -384,7 +408,16 @@ def local_search(pop, n_searched, localsearch_rate, fliprate, perturbrate, maxma
                                 valid = True
                                 while True:
                                     # Position perturb first
-                                    mag = random.uniform(0, maxmag)
+                                    # Updated maxmag
+                                    maxmag_new = check_available_perturb_simple(child_prods[j], top_constraints)
+                                    maxmag_new = min([maxmag,maxmag_new])
+                                    # print(f"\nmaxmag:\t{maxmag}")
+                                    # print(f"maxmag_new:\t{maxmag_new}")
+                                    # print(f"valid = {valid}")
+                                    
+                                    mag = random.uniform(0, maxmag_new)
+                                    print(f"Trying perturb with magnitude {mag}")
+                                    # mag = random.uniform(0, maxmag)
                                     xp = random.uniform(-mag, mag)
                                     yp = np.sqrt(mag**2 - xp**2)
                                     yp = random.choice([yp, -yp])
@@ -397,7 +430,7 @@ def local_search(pop, n_searched, localsearch_rate, fliprate, perturbrate, maxma
                                     # If it is not valid, break and keep the original position.
                                     checkPoint = Point(xnew, ynew)
                                     if not checkPoint.intersects(pBoards_multi):
-                                        print(f"Perturb for child {i}, pressure rod {j} was outside UUT bounds. Trying again.")
+                                        # print(f"Perturb for child {i}, pressure rod {j} was outside UUT bounds. Trying again.")
                                         valid = False
                                         break
                                     
@@ -411,20 +444,20 @@ def local_search(pop, n_searched, localsearch_rate, fliprate, perturbrate, maxma
                                     # Validate the perturbation here
                                     # Make sure pressure rod is within the UUT and make sure it doesn't intersect any components, using the appropriate buffer sizes
                                     if not child_prods[j].center.intersects(pBoards_multi):
-                                        print(f"Perturb for child {i}, pressure rod {j} was outside UUT bounds (2nd check). Trying again.")
+                                        # print(f"Perturb for child {i}, pressure rod {j} was outside UUT bounds (2nd check). Trying again.")
                                         valid = False
                                         break
                                     # if not child_prods[j].tip_UUT_buffer.within(pBoards_multi):
                                     #     valid = False
                                     #     break
                                     if child_prods[j].tip_component_buffer.intersects(topcomponents):
-                                        print(f"Perturb for child{i}, pressure rod {j} was too close to a top side component. Trying again.")
+                                        # print(f"Perturb for child{i}, pressure rod {j} was too close to a top side component. Trying again.")
                                         valid = False
                                         break
                                     
                                     # Make sure the pressure rod isn't too close to any top probes
                                     if child_prods[j].tip_from_top_probe_buffer.intersects(top_probes):
-                                        print(f"Perturb for child{i}, pressure rod {j} was too close to a top side probe. Trying again.")
+                                        # print(f"Perturb for child{i}, pressure rod {j} was too close to a top side probe. Trying again.")
                                         valid = False
                                         break
                                         
@@ -435,22 +468,29 @@ def local_search(pop, n_searched, localsearch_rate, fliprate, perturbrate, maxma
                                             continue
                                         dist = constraints.centroid_distance(child_prods[j].tip, prod_chosen.tip)
                                         if dist < child_prods[j].ctc:
-                                            print(f"Perturb for child{i}, pressure rod {j} was too close to a previously-placed pressure rod. Trying again.")
+                                            # print(f"Perturb for child{i}, pressure rod {j} was too close to a previously-placed pressure rod. Trying again.")
                                             valid = False
                                             break
-                                        
-                                else:
-                                    break
+                                    
+                                    if valid == True:
+                                        break
+                                # else:
+                                #     valid = True
+                                #     break
                                 
                                 # If the perturbation is not valid, return the pressure rod to its original position and try again.
                                 if valid == False:
                                     child_prods[j].update_pressure_rod(xold, yold, child_prods[j].rod_type, child_prods[j].on)
-                                    print(f"Local search perturb was not valid for child {i}, pressure rod {j}. Trying again.\n")
+                                    print(f"UNSUCCESSFUL position perturb for child {i}, pressure rod {j}. Trying again.\n")
+                                    valid = True
                                     continue
+                                    # print(f"UNSUCCESSFUL position perturb with magnitude {mag}")
+                                    break
                                 # if valid == False:
                                 #     break
                                 
                                 if valid == True:
+                                    print(f"SUCCESSFUL position perturb for child {i}, pressure rod {j} with magnitude {mag}")
                                     break
                         
                         
@@ -511,7 +551,7 @@ def local_search(pop, n_searched, localsearch_rate, fliprate, perturbrate, maxma
                 if child_prods[j] != parent1_prods[j]:
                     complete = True
                     # print(f"Prod {j} has been changed")
-                    # print("At least one gene changed via local search")
+                    print("##### At least one gene changed via local search #####\n\n")
                     break
                 else:
                     pass
@@ -963,7 +1003,7 @@ def main_optimization():
         # If the best fitness for each of the first three strain parameters 
         # are less than 500 microstrain, then end the optimization early
         if not design_accepted:
-            if (best_fitnesses_1[-1]<=500.) and (best_fitnesses_2[-1]<=500.) and (best_fitnesses_3[-1]<=500.):
+            if all(best_fitnesses_1[-1,:]<=500.) or all(best_fitnesses_2[-1,:]<=500.) or all(best_fitnesses_3[-1,:]<=500.):
                 print("\nDesign found that meets minimum standard for strain:")
                 print(f"Strain_xx: {best_fitnesses_1[-1]}")
                 print(f"Strain_yy: {best_fitnesses_1[-2]}")
