@@ -986,7 +986,7 @@ def main_optimization():
         best_fitnesses_3.append(fitness_values[j,:])
         j = fitness_values[:,3].argmin()
         best_fitnesses_4.append(fitness_values[j,:])
-        pop = selection(pop, fitness_values, pop_size)  # we arbitrary set desired pereto front size = pop_size
+        pop = selection(pop, fitness_values, pop_size)  # we arbitrarily set desired pareto front size = pop_size
         print('Generation:', i)
         fig,ax = plt.subplots(dpi=300)
         for j in range(len(pop)):
@@ -1003,7 +1003,7 @@ def main_optimization():
         # If the best fitness for each of the first three strain parameters 
         # are less than 500 microstrain, then end the optimization early
         if not design_accepted:
-            if all(best_fitnesses_1[-1,:]<=500.) or all(best_fitnesses_2[-1,:]<=500.) or all(best_fitnesses_3[-1,:]<=500.):
+            if np.any(fitness_values < 500):
                 print("\nDesign found that meets minimum standard for strain:")
                 print(f"Strain_xx: {best_fitnesses_1[-1]}")
                 print(f"Strain_yy: {best_fitnesses_1[-2]}")
