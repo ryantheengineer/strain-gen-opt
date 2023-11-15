@@ -421,7 +421,7 @@ def grid_nprods(pBoards, pComponentsTop):
     return nprods_small, nprods_large, pBoards_diff
 
 
-def create_chromosome(nprods, pBoards, pComponentsTop, df_Probes, pBoards_diff):
+def create_chromosome(nprods, pBoards, pComponentsTop, df_Probes, pBoards_diff, all_on=False, rod_type="All"):
     # Initialize random chromosome, where the first ncircles entries are
     # the x coordinates, the next ncircles entries are y coordinates, then
     # radii, and on/off binary values
@@ -465,8 +465,14 @@ def create_chromosome(nprods, pBoards, pComponentsTop, df_Probes, pBoards_diff):
         valid = True
         x = random.uniform(xmin,xmax)
         y = random.uniform(ymin,ymax)
-        rod_type_i = random.randint(0,3)
-        on = random.randint(0,1)
+        if rod_type not in rod_types:
+            rod_type_i = random.randint(0,3)
+        else:
+            rod_type_i = rod_types.index(rod_type)
+        if all_on:
+            on = 1
+        else:
+            on = random.randint(0,1)
         prod = PressureRod(x,y,rod_types[rod_type_i],on)
         intersects_topcomponents = False
         intersects_topprobes = False
@@ -776,10 +782,10 @@ def initialize_population_multiprocessing(nchromosomes, nprods, pBoards, pCompon
         
     return initial_population
 
-def initialize_population_simple(npop, nprods, pBoards, pComponentsTop, df_Probes, pBoards_diff):
+def initialize_population_simple(npop, nprods, pBoards, pComponentsTop, df_Probes, pBoards_diff, all_on, rod_type):
     initial_population = []
     for i in range(npop):
-        initial_population.append(create_chromosome(nprods,pBoards,pComponentsTop,df_Probes,pBoards_diff))
+        initial_population.append(create_chromosome(nprods,pBoards,pComponentsTop,df_Probes,pBoards_diff,all_on, rod_type))
         print(f"Chromosome {i} of {npop} created")
     # initial_population = [create_chromosome(nprods,pBoards,pComponentsTop,df_Probes,pBoards_diff) for _ in range(npop)] # Could this be modified to use multiprocessing? This will become very time intensive with larger populations
     return initial_population
@@ -930,9 +936,9 @@ def runFEA_valid_circles(valid_circles, df_PressureRods, root, inputfile, gen, i
     FEApath = runFEA.loadFEApath('FEApath.pk')
     exit_code = runFEA.runFEA(FEApath, new_path)
     
-    results = (gen, iteration)
+    # results = (gen, iteration)
     
-    return results
+    return (exit_code)
     
 
 def read_FEA_results(root, inputfile, gen, iteration):

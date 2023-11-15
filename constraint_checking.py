@@ -18,10 +18,10 @@ if __name__ == "__main__":
     # Parameters
     print("Setting genetic algorithm parameters")
     pop_size = 20              # initial number of chromosomes
-    rate_crossover = 5         # number of chromosomes that we apply crossover to
-    rate_mutation = 5          # number of chromosomes that we apply mutation to
+    rate_crossover = 20         # number of chromosomes that we apply crossover to
+    rate_mutation = 20          # number of chromosomes that we apply mutation to
     chance_mutation = 0.3       # normalized percent chance that an individual pressure rod will be mutated
-    n_searched = 5      # number of chromosomes that we apply local_search to
+    n_searched = 100      # number of chromosomes that we apply local_search to
     chance_localsearch = 0.5
     fliprate = 0.3
     perturbrate = 1.0
