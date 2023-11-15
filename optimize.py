@@ -587,10 +587,10 @@ def local_search(pop, n_searched, localsearch_rate, fliprate, perturbrate, maxma
         child_chromosome = constraints.interpret_prods_to_chromosome(child_prods)
         offspring[i, :] = child_chromosome
         
-        # Plot the parent and child designs for examination
-        constraints.plot_prods_top_constraints(parent1_prods, top_constraints, f"Local Search - Offspring {i}: Parent 1")
-        constraints.plot_prods_top_constraints(child_prods, top_constraints, f"Local Search - Offspring {i}: Child")
-        plt.show()
+        # # Plot the parent and child designs for examination
+        # constraints.plot_prods_top_constraints(parent1_prods, top_constraints, f"Local Search - Offspring {i}: Parent 1")
+        # constraints.plot_prods_top_constraints(child_prods, top_constraints, f"Local Search - Offspring {i}: Child")
+        # plt.show()
         
     return offspring    # arr(loc_search_size x n_var)
 
@@ -1046,11 +1046,17 @@ def main_optimization():
         # If the best fitness for each of the first three strain parameters 
         # are less than 500 microstrain, then end the optimization early
         if not design_accepted:
-            if np.any(fitness_values < 500):
+            # Check if any row contains only values less than the threshold
+            condition = np.all(fitness_values < 500, axis=1)
+            # Get the row indices where the condition is true
+            indices = np.where(condition)[0]
+            if len(indices) > 0:
                 print("\nDesign found that meets minimum standard for strain:")
-                print(f"Strain_xx: {best_fitnesses_1[-1]}")
-                print(f"Strain_yy: {best_fitnesses_1[-2]}")
-                print(f"Strain_xy: {best_fitnesses_1[-3]}")
+                for index in indices:
+                    print(f"\nDesign {index}:")
+                    print(f"Strain xx:\t{fitness_values[index][0]}")
+                    print(f"Strain yy:\t{fitness_values[index][1]}")
+                    print(f"Strain xy:\t{fitness_values[index][2]}")
                 
                 while True:
                     continue_optimizing = input("\nAccept best design and end optimization early? Y/N")
