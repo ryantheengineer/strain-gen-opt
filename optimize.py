@@ -7,6 +7,7 @@ Created on Mon Aug 14 22:14:37 2023
 
 import random
 import numpy as np
+import pandas as pd
 import matplotlib.pyplot as plt
 import math
 import constraints
@@ -18,6 +19,7 @@ import os
 from datetime import datetime
 from shapely.geometry import Point
 from shapely.ops import nearest_points
+import plotly.express as px
 
 # MINIMIZATION
 
@@ -703,7 +705,7 @@ def evaluation(pop, nobjs, gen, nprods, inputfile, constraint_geom):
         for i in missing_iterations:
             print(f"Rerun of FEA_GEN{gen}_ITER{i}")
             exit_code = constraints.runFEA_valid_circles(valid_circles[i], df_PressureRods, root, inputfile, gen, i)
-            successful.append(exit_code[0])
+            successful.append(exit_code)
             
         if all(element == 0 for element in successful):
             break
@@ -973,17 +975,17 @@ def main_optimization():
     
     # Parameters
     print("Setting genetic algorithm parameters")
-    pop_size = 20              # initial number of chromosomes
-    rate_crossover = 5         # number of chromosomes that we apply crossover to
-    rate_mutation = 5          # number of chromosomes that we apply mutation to
+    pop_size = 40              # initial number of chromosomes
+    rate_crossover = 13         # number of chromosomes that we apply crossover to
+    rate_mutation = 13          # number of chromosomes that we apply mutation to
     chance_mutation = 0.3       # normalized percent chance that an individual pressure rod will be mutated
-    n_searched = 5              # number of chromosomes that we apply local_search to
+    n_searched = 13              # number of chromosomes that we apply local_search to
     chance_localsearch = 0.5
     fliprate = 0.4
     perturbrate = 1.0
     maxmag = 0.1             # coordinate displacement during local_search
     typerate = 0.1
-    maximum_generation = 15    # number of iterations
+    maximum_generation = 10    # number of iterations
     nobjs = 4
     
     nprods = 40
@@ -1019,8 +1021,16 @@ def main_optimization():
         pop = np.append(pop, offspring_from_crossover, axis=0)
         pop = np.append(pop, offspring_from_mutation, axis=0)
         pop = np.append(pop, offspring_from_local_search, axis=0)
+        
         print("Evaluating fitnesses...")
         fitness_values = evaluation(pop, nobjs, i, nprods, inputfile, constraint_geom)
+        fitness_values_temp = copy.deepcopy(fitness_values)
+        fitness_values_temp = np.append(fitness_values_temp, i*np.ones(fitness_values_temp.shape[0],1)) # Add the generation number as a column for later referencing
+        if i == 0:
+            complete_fitness_values = copy.deepcopy(fitness_values_temp)
+        else:
+            complete_fitness_values = np.concatenate((complete_fitness_values, fitness_values_temp))
+            
         j = fitness_values[:,0].argmin()
         best_fitnesses_1.append(fitness_values[j,:])
         j = fitness_values[:,1].argmin()
@@ -1030,7 +1040,7 @@ def main_optimization():
         j = fitness_values[:,3].argmin()
         best_fitnesses_4.append(fitness_values[j,:])
         pop = selection(pop, fitness_values, pop_size)  # we arbitrarily set desired pareto front size = pop_size
-        print('Generation:', i)
+        print('\n\nGeneration:', i)
         fig,ax = plt.subplots(dpi=300)
         for j in range(len(pop)):
             x1 = fitness_values[j][0]
@@ -1074,50 +1084,55 @@ def main_optimization():
         
         if design_accepted:
             break
-        
-        # fig = plt.figure(dpi=300)
-        # ax = fig.add_subplot(projection='3d')
-        # for j in range(len(pop)):
-        #     x1 = pop[j][0]
-        #     x2 = pop[j][1]
-        #     x3 = pop[j][2]
-        #     ax.scatter(x1,x2,x3, marker='o', color='b')
-        # ax.set_xlabel('x1')
-        # ax.set_ylabel('x2')
-        # ax.set_zlabel('x3')
-        # ax.set_xlim3d(-5, 5)
-        # ax.set_ylim3d(-5, 5)
-        # ax.set_zlim3d(-5, 5)
-        # ax.set_title(f"Generation: {i}")
     
-    # Pareto front visualization
-    fitness_values = evaluation(pop, nobjs, i, nprods, inputfile, constraint_geom)
-    index = np.arange(pop.shape[0]).astype(int)
-    pareto_front_index = pareto_front_finding(fitness_values, index)
-    pop = pop[pareto_front_index, :]
-    # print("_________________")
-    # print("Optimal solutions:")
-    # print("       x1               x2                 x3")
-    # print(pop) # show optimal solutions
-    fitness_values = fitness_values[pareto_front_index]
-    # print("______________")
-    # print("Fitness values:")
-    # print("  objective 1    objective 2")
-    # print(fitness_values)
-    best_fitnesses_1 = np.asarray(best_fitnesses_1)
-    best_fitnesses_2 = np.asarray(best_fitnesses_2)
-    best_fitnesses_3 = np.asarray(best_fitnesses_3)
-    best_fitnesses_4 = np.asarray(best_fitnesses_4)
-    plt.figure(dpi=300)
-    plt.scatter(fitness_values[:, 0],fitness_values[:, 1], label='Pareto optimal front')
-    plt.scatter(best_fitnesses_1[:,0],best_fitnesses_1[:,1], label="Optimal objective 1")
-    plt.scatter(best_fitnesses_2[:,0],best_fitnesses_2[:,1], label="Optimal objective 2")
-    plt.legend(loc='best')
-    plt.xlabel('Objective function F1')
-    plt.ylabel('Objective function F2')
-    plt.title('Optimal designs over all generations')
-    # plt.grid(b=1)
-    plt.show()
+    # 3D plot of optimization progression
+    colnames = ["Strain_xx", "Strain_yy", "Strain_xy", "Sum_Principal_Strains", "Generation"]
+    df_fitness_values = pd.DataFrame(complete_fitness_values, columns=colnames)
+    # Add RGB values based on the generation
+    Rvals = list(np.linspace(0, 1, maximum_generation))
+    Gvals = list(np.zeros((maximum_generation)))
+    Bvals = list(np.linspace(1, 0, maximum_generation))
+    
+    def get_rgb(row):
+        i = int(row['Generation'])
+        rgb_values = [Rvals[i], Gvals[i], Bvals[i]]
+        return rgb_values
+
+    # Apply the function to create the RGB column
+    df_fitness_values['RGB'] = df_fitness_values.apply(get_rgb, axis=1)
+    
+    # Plot the fitness values in a plotly 3d plot
+    fig = px.scatter_3d(df_fitness_values, x="Strain_xx", y="Strain_yy", z="Strain_xy", color="RGB")
+    fig.show()
+    
+    # # Pareto front visualization
+    # fitness_values = evaluation(pop, nobjs, i, nprods, inputfile, constraint_geom)
+    # index = np.arange(pop.shape[0]).astype(int)
+    # pareto_front_index = pareto_front_finding(fitness_values, index)
+    # pop = pop[pareto_front_index, :]
+    # # print("_________________")
+    # # print("Optimal solutions:")
+    # # print("       x1               x2                 x3")
+    # # print(pop) # show optimal solutions
+    # fitness_values = fitness_values[pareto_front_index]
+    # # print("______________")
+    # # print("Fitness values:")
+    # # print("  objective 1    objective 2")
+    # # print(fitness_values)
+    # best_fitnesses_1 = np.asarray(best_fitnesses_1)
+    # best_fitnesses_2 = np.asarray(best_fitnesses_2)
+    # best_fitnesses_3 = np.asarray(best_fitnesses_3)
+    # best_fitnesses_4 = np.asarray(best_fitnesses_4)
+    # plt.figure(dpi=300)
+    # plt.scatter(fitness_values[:, 0],fitness_values[:, 1], label='Pareto optimal front')
+    # plt.scatter(best_fitnesses_1[:,0],best_fitnesses_1[:,1], label="Optimal objective 1")
+    # plt.scatter(best_fitnesses_2[:,0],best_fitnesses_2[:,1], label="Optimal objective 2")
+    # plt.legend(loc='best')
+    # plt.xlabel('Objective function F1')
+    # plt.ylabel('Objective function F2')
+    # plt.title('Optimal designs over all generations')
+    # # plt.grid(b=1)
+    # plt.show()
     
     end_time = time.time()
     
@@ -1125,10 +1140,10 @@ def main_optimization():
     print(f"Total elapsed time:\t{end_time-start_time}")
     
     plt.figure(dpi=300)
-    plt.plot(best_fitnesses_1[:,0], label="Avg strain xx")
-    plt.plot(best_fitnesses_2[:,1], label="Avg strain yy")
-    plt.plot(best_fitnesses_3[:,2], label="Avg strain xy")
-    plt.plot(best_fitnesses_4[:,3], label="Sum principal strains")
+    plt.plot(best_fitnesses_1[:,0], label="Max strain xx")
+    plt.plot(best_fitnesses_2[:,1], label="Max strain yy")
+    plt.plot(best_fitnesses_3[:,2], label="Max strain xy")
+    plt.plot(best_fitnesses_4[:,3], label="Sum max ++principal strains")
     plt.title("Fitnesses by objective")
     plt.legend()
     
