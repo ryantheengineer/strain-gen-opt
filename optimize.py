@@ -117,7 +117,7 @@ def crossover_prods(pop, crossover_rate, nprods, top_constraints):
 
 
 # Perform crossover with mutation
-def mutation(pop, n_mutated, mutation_rate, nprods, top_constraints, all_on, rod_type):
+def mutation(pop, n_mutated, mutation_rate, nprods, top_constraints, all_on, on_prob, rod_type):
     """
     Mutation function. Works like crossover, but with the opportunity for
     genes to randomly be changed.
@@ -218,7 +218,12 @@ def mutation(pop, n_mutated, mutation_rate, nprods, top_constraints, all_on, rod
                             if all_on:
                                 on = 1
                             else:
-                                on = random.randint(0,1)
+                                # on = random.randint(0,1)
+                                on_chance = random.uniform(0,1)
+                                if on_chance <= on_prob:
+                                    on = 1
+                                else:
+                                    on = 0
                             prod_new = constraints.PressureRod(x,y,rod_types[rod_type_i],on)
                             # Make sure pressure rod is within the UUT and make sure it doesn't intersect any components, using the appropriate buffer sizes
                             if not prod_new.center.intersects(pBoards_multi):
@@ -306,7 +311,7 @@ def check_available_perturb_simple(child_prod, top_constraints):
 
 # Create some amount of offspring Q by adding fixed coordinate displacement to some 
 # randomly selected parent's genes/coordinates
-def local_search(pop, n_searched, localsearch_rate, fliprate, perturbrate, maxmag, typerate, nprods, top_constraints, all_on, rod_type):
+def local_search(pop, n_searched, localsearch_rate, on_prob, perturbrate, maxmag, typerate, nprods, top_constraints, all_on, rod_type):
     """
     Create offspring by adding coordinate displacement to randomly selected
     genes in parent designs.
@@ -369,33 +374,38 @@ def local_search(pop, n_searched, localsearch_rate, fliprate, perturbrate, maxma
                             while True:
                                 # Chance to flip on/off parameter
                                 old_on = child_prods[j].on
-                                flip_chance = random.uniform(0,1)
-                                if fliprate > flip_chance:
-                                    if old_on == 1:
-                                        new_on = 0
-                                    else:
-                                        new_on = 1
-                                    # print(f"Flipped prod {j} from {old_on} to {new_on}")
-                                    # print(f"\nChild prod {j} before:\t{child_prods[j].on}")
-                                    # print(f"Parent prod {j} before:\t{parent1_prods[j].on}")
-                                    child_prods[j].update_pressure_rod(child_prods[j].x, child_prods[j].y, child_prods[j].rod_type, new_on)
-                                    # print(f"Child prod {j} after:\t{child_prods[j].on}")
-                                    # print(f"Parent prod {j} after:\t{parent1_prods[j].on}")
-                                    
-                                    # Validate that the pressure rod doesn't conflict with other pressure rods
-                                    if child_prods[j].on == 0.0:
-                                        valid = True
+                                on_chance = random.uniform(0,1)
+                                if on_chance <= on_prob:
+                                    new_on = 1
+                                else:
+                                    new_on = 0
+                                # flip_chance = random.uniform(0,1)
+                                # if fliprate > flip_chance:
+                                #     if old_on == 1:
+                                #         new_on = 0
+                                #     else:
+                                #         new_on = 1
+                                # print(f"Flipped prod {j} from {old_on} to {new_on}")
+                                # print(f"\nChild prod {j} before:\t{child_prods[j].on}")
+                                # print(f"Parent prod {j} before:\t{parent1_prods[j].on}")
+                                child_prods[j].update_pressure_rod(child_prods[j].x, child_prods[j].y, child_prods[j].rod_type, new_on)
+                                # print(f"Child prod {j} after:\t{child_prods[j].on}")
+                                # print(f"Parent prod {j} after:\t{parent1_prods[j].on}")
+                                
+                                # Validate that the pressure rod doesn't conflict with other pressure rods
+                                if child_prods[j].on == 0.0:
+                                    valid = True
+                                    break
+                                # Make sure pressure rod doesn't conflict with any previously-placed pressure rods
+                                for k, prod_chosen in enumerate(child_prods):
+                                    if k == j:
+                                        # Don't compare against the current pressure rod
+                                        continue
+                                    dist = constraints.centroid_distance(child_prods[j].tip, prod_chosen.tip)
+                                    if dist < child_prods[j].ctc:
+                                        # print(f"prod {j} was too close to another prod")
+                                        valid = False
                                         break
-                                    # Make sure pressure rod doesn't conflict with any previously-placed pressure rods
-                                    for k, prod_chosen in enumerate(child_prods):
-                                        if k == j:
-                                            # Don't compare against the current pressure rod
-                                            continue
-                                        dist = constraints.centroid_distance(child_prods[j].tip, prod_chosen.tip)
-                                        if dist < child_prods[j].ctc:
-                                            # print(f"prod {j} was too close to another prod")
-                                            valid = False
-                                            break
                                 else:
                                     break
                                     
@@ -885,7 +895,7 @@ def pareto_front_finding(fitness_values, pop_index):
     for i in range(pop_size):
         for j in range(pop_size):
             if all(fitness_values[j] <= fitness_values[i]) and any(fitness_values[j] < fitness_values[i]):
-                pareto_front[i] = 0 # i is not in pareto front becouse j dominates i
+                pareto_front[i] = 0 # i is not in pareto front because j dominates i
                 break
 
     return pop_index[pareto_front]  # arr(len_pareto_front,)
@@ -975,20 +985,21 @@ def main_optimization():
     
     # Parameters
     print("Setting genetic algorithm parameters")
-    pop_size = 40              # initial number of chromosomes
-    rate_crossover = 13         # number of chromosomes that we apply crossover to
-    rate_mutation = 13          # number of chromosomes that we apply mutation to
-    chance_mutation = 0.3       # normalized percent chance that an individual pressure rod will be mutated
-    n_searched = 13              # number of chromosomes that we apply local_search to
-    chance_localsearch = 0.5
-    fliprate = 0.4
+    pop_size = 45              # initial number of chromosomes
+    rate_crossover = 15         # number of chromosomes that we apply crossover to
+    rate_mutation = 15          # number of chromosomes that we apply mutation to
+    chance_mutation = 0.2       # normalized percent chance that an individual pressure rod will be mutated
+    n_searched = 15              # number of chromosomes that we apply local_search to
+    chance_localsearch = 0.2
+    on_prob_initial = 0.5   # Initial percentage chance that a pressure rod will be on (only in the initial population)
+    on_prob = 0.8           # Likelihood an "off" pressure rod will be switched on
     perturbrate = 1.0
     maxmag = 0.1             # coordinate displacement during local_search
     typerate = 0.1
-    maximum_generation = 10    # number of iterations
-    nobjs = 4
+    maximum_generation = 20    # number of iterations
+    nobjs = 5
     
-    nprods = 40
+    nprods = 64
     # nprods = 40
     # nprods = nprods_small
     # nprods = len(df_PressureRods)
@@ -997,13 +1008,13 @@ def main_optimization():
     design_accepted = False     # Flag for deciding whether to end optimization early if criteria are met
     
     print("Creating initial random population")
-    all_on = True
+    all_on = False
     rod_type = 'Press-Fit Tapered'
     # rod_types = ['Press-Fit Tapered',
     #              'Press-Fit Flat',
     #              '3.325" Tapered',
     #              '3.325" Flat']
-    pop = constraints.initialize_population_simple(pop_size, nprods, pBoards, pComponentsTop, df_Probes, pBoards_diff, all_on, rod_type)    # initial parents population P
+    pop = constraints.initialize_population_simple(pop_size, nprods, pBoards, pComponentsTop, df_Probes, pBoards_diff, all_on, on_prob_initial, rod_type)    # initial parents population P
     pop = np.asarray(pop)
     end_setup_time = time.time()
     
@@ -1013,9 +1024,10 @@ def main_optimization():
     best_fitnesses_4 = []
     # NSGA-II main loop
     for i in range(maximum_generation):
+        print('\n\nGeneration:', i)
         offspring_from_crossover = crossover_prods(pop, rate_crossover, nprods, top_constraints)
-        offspring_from_mutation = mutation(pop, rate_mutation, chance_mutation, nprods, top_constraints, all_on, rod_type)
-        offspring_from_local_search = local_search(pop, n_searched, chance_localsearch, fliprate, perturbrate, maxmag, typerate, nprods, top_constraints, all_on, rod_type)
+        offspring_from_mutation = mutation(pop, rate_mutation, chance_mutation, nprods, top_constraints, all_on, on_prob, rod_type)
+        offspring_from_local_search = local_search(pop, n_searched, chance_localsearch, on_prob, perturbrate, maxmag, typerate, nprods, top_constraints, all_on, rod_type)
         
         # Append children (crossover, mutation, local search) to parents
         pop = np.append(pop, offspring_from_crossover, axis=0)
@@ -1025,11 +1037,12 @@ def main_optimization():
         print("Evaluating fitnesses...")
         fitness_values = evaluation(pop, nobjs, i, nprods, inputfile, constraint_geom)
         fitness_values_temp = copy.deepcopy(fitness_values)
-        fitness_values_temp = np.append(fitness_values_temp, i*np.ones(fitness_values_temp.shape[0],1)) # Add the generation number as a column for later referencing
+        genvals = i*np.ones((fitness_values_temp.shape[0],1))
+        fitness_values_temp = np.append(fitness_values_temp, genvals, axis=1) # Add the generation number as a column for later referencing
         if i == 0:
             complete_fitness_values = copy.deepcopy(fitness_values_temp)
         else:
-            complete_fitness_values = np.concatenate((complete_fitness_values, fitness_values_temp))
+            complete_fitness_values = np.append(complete_fitness_values, fitness_values_temp, axis=0)
             
         j = fitness_values[:,0].argmin()
         best_fitnesses_1.append(fitness_values[j,:])
@@ -1040,7 +1053,6 @@ def main_optimization():
         j = fitness_values[:,3].argmin()
         best_fitnesses_4.append(fitness_values[j,:])
         pop = selection(pop, fitness_values, pop_size)  # we arbitrarily set desired pareto front size = pop_size
-        print('\n\nGeneration:', i)
         fig,ax = plt.subplots(dpi=300)
         for j in range(len(pop)):
             x1 = fitness_values[j][0]
@@ -1048,91 +1060,102 @@ def main_optimization():
             # x1 = pop[j][0]
             # x2 = pop[j][1]
             ax.scatter(x1,x2,marker='o',color='b')
-        ax.set_xlabel('x1')
-        ax.set_ylabel('x2')
+        ax.set_xlabel('Strain_xx')
+        ax.set_ylabel('Strain_yy')
         ax.set_title(f"Generation: {i}")
         plt.show()
         
-        # If the best fitness for each of the first three strain parameters 
-        # are less than 500 microstrain, then end the optimization early
-        if not design_accepted:
-            # Check if any row contains only values less than the threshold
-            condition = np.all(fitness_values < 500, axis=1)
-            # Get the row indices where the condition is true
-            indices = np.where(condition)[0]
-            if len(indices) > 0:
-                print("\nDesign found that meets minimum standard for strain:")
-                for index in indices:
-                    print(f"\nDesign {index}:")
-                    print(f"Strain xx:\t{fitness_values[index][0]}")
-                    print(f"Strain yy:\t{fitness_values[index][1]}")
-                    print(f"Strain xy:\t{fitness_values[index][2]}")
+        # # If the best fitness for each of the first three strain parameters 
+        # # are less than 500 microstrain, then end the optimization early
+        # if not design_accepted:
+        #     # Check if any row contains only values less than the threshold
+        #     condition = np.all(fitness_values < 500, axis=1)
+        #     # Get the row indices where the condition is true
+        #     indices = np.where(condition)[0]
+        #     if len(indices) > 0:
+        #         print("\nDesign found that meets minimum standard for strain:")
+        #         for index in indices:
+        #             print(f"\nDesign {index}:")
+        #             print(f"Strain xx:\t{fitness_values[index][0]}")
+        #             print(f"Strain yy:\t{fitness_values[index][1]}")
+        #             print(f"Strain xy:\t{fitness_values[index][2]}")
                 
-                while True:
-                    continue_optimizing = input("\nAccept best design and end optimization early? Y/N")
-                    if continue_optimizing.lower() == "y":
-                        print("Designs accepted. Ending optimization")
-                        design_accepted = True
-                        break
-                    elif continue_optimizing.lower() == "n":
-                        print(f"Designs not accepted. Continuing optimization until the prescribed {maximum_generation} generations are complete.")
-                        design_accepted = False
-                        break
-                    else:
-                        print("Please enter Y or N to continue.")
-                        continue
+        #         while True:
+        #             continue_optimizing = input("\nAccept best design and end optimization early? Y/N")
+        #             if continue_optimizing.lower() == "y":
+        #                 print("Designs accepted. Ending optimization")
+        #                 design_accepted = True
+        #                 break
+        #             elif continue_optimizing.lower() == "n":
+        #                 print(f"Designs not accepted. Continuing optimization until the prescribed {maximum_generation} generations are complete.")
+        #                 design_accepted = False
+        #                 break
+        #             else:
+        #                 print("Please enter Y or N to continue.")
+        #                 continue
         
-        if design_accepted:
-            break
+        # if design_accepted:
+        #     break
     
     # 3D plot of optimization progression
-    colnames = ["Strain_xx", "Strain_yy", "Strain_xy", "Sum_Principal_Strains", "Generation"]
+    colnames = ["Strain_xx", "Strain_yy", "Strain_xy", "Principal_Strain_Min", "Principal_Strain_Max", "Generation"]
     df_fitness_values = pd.DataFrame(complete_fitness_values, columns=colnames)
     # Add RGB values based on the generation
     Rvals = list(np.linspace(0, 1, maximum_generation))
     Gvals = list(np.zeros((maximum_generation)))
     Bvals = list(np.linspace(1, 0, maximum_generation))
     
-    def get_rgb(row):
-        i = int(row['Generation'])
-        rgb_values = [Rvals[i], Gvals[i], Bvals[i]]
-        return rgb_values
+    R = []
+    G = []
+    B = []
+    for index, row in df_fitness_values.iterrows():
+        i = int(df_fitness_values.loc[index, "Generation"])
+        R.append(Rvals[i])
+        G.append(Gvals[i])
+        B.append(Bvals[i])
+        
+    df_fitness_values["R"] = R
+    df_fitness_values["G"] = G
+    df_fitness_values["B"] = B
+    
+    
+    # def get_rgb(row):
+    #     i = int(row['Generation'])
+    #     rgb_values = [Rvals[i], Gvals[i], Bvals[i]]
+    #     return rgb_values
 
-    # Apply the function to create the RGB column
-    df_fitness_values['RGB'] = df_fitness_values.apply(get_rgb, axis=1)
+    # # Apply the function to create the RGB column
+    # df_fitness_values['RGB'] = df_fitness_values.apply(get_rgb, axis=1)
     
-    # Plot the fitness values in a plotly 3d plot
-    fig = px.scatter_3d(df_fitness_values, x="Strain_xx", y="Strain_yy", z="Strain_xy", color="RGB")
-    fig.show()
     
-    # # Pareto front visualization
-    # fitness_values = evaluation(pop, nobjs, i, nprods, inputfile, constraint_geom)
-    # index = np.arange(pop.shape[0]).astype(int)
-    # pareto_front_index = pareto_front_finding(fitness_values, index)
-    # pop = pop[pareto_front_index, :]
-    # # print("_________________")
-    # # print("Optimal solutions:")
-    # # print("       x1               x2                 x3")
-    # # print(pop) # show optimal solutions
-    # fitness_values = fitness_values[pareto_front_index]
-    # # print("______________")
-    # # print("Fitness values:")
-    # # print("  objective 1    objective 2")
-    # # print(fitness_values)
-    # best_fitnesses_1 = np.asarray(best_fitnesses_1)
-    # best_fitnesses_2 = np.asarray(best_fitnesses_2)
-    # best_fitnesses_3 = np.asarray(best_fitnesses_3)
-    # best_fitnesses_4 = np.asarray(best_fitnesses_4)
-    # plt.figure(dpi=300)
-    # plt.scatter(fitness_values[:, 0],fitness_values[:, 1], label='Pareto optimal front')
-    # plt.scatter(best_fitnesses_1[:,0],best_fitnesses_1[:,1], label="Optimal objective 1")
-    # plt.scatter(best_fitnesses_2[:,0],best_fitnesses_2[:,1], label="Optimal objective 2")
-    # plt.legend(loc='best')
-    # plt.xlabel('Objective function F1')
-    # plt.ylabel('Objective function F2')
-    # plt.title('Optimal designs over all generations')
-    # # plt.grid(b=1)
-    # plt.show()
+    # Pareto front visualization
+    fitness_values = evaluation(pop, nobjs, i, nprods, inputfile, constraint_geom)
+    index = np.arange(pop.shape[0]).astype(int)
+    pareto_front_index = pareto_front_finding(fitness_values, index)
+    pop = pop[pareto_front_index, :]
+    # print("_________________")
+    # print("Optimal solutions:")
+    # print("       x1               x2                 x3")
+    # print(pop) # show optimal solutions
+    fitness_values = fitness_values[pareto_front_index]
+    # print("______________")
+    # print("Fitness values:")
+    # print("  objective 1    objective 2")
+    # print(fitness_values)
+    best_fitnesses_1 = np.asarray(best_fitnesses_1)
+    best_fitnesses_2 = np.asarray(best_fitnesses_2)
+    best_fitnesses_3 = np.asarray(best_fitnesses_3)
+    best_fitnesses_4 = np.asarray(best_fitnesses_4)
+    plt.figure(dpi=300)
+    plt.scatter(fitness_values[:, 0],fitness_values[:, 1], label='Pareto optimal front')
+    plt.scatter(best_fitnesses_1[:,0],best_fitnesses_1[:,1], label="Optimal objective 1")
+    plt.scatter(best_fitnesses_2[:,0],best_fitnesses_2[:,1], label="Optimal objective 2")
+    plt.legend(loc='best')
+    plt.xlabel('Objective function F1')
+    plt.ylabel('Objective function F2')
+    plt.title('Optimal designs over all generations')
+    # plt.grid(b=1)
+    plt.show()
     
     end_time = time.time()
     
@@ -1149,6 +1172,11 @@ def main_optimization():
     
     
     best_fitnesses = np.concatenate((best_fitnesses_1, best_fitnesses_2, best_fitnesses_3, best_fitnesses_4), axis=1)
+
+    # Plot the fitness values in a plotly 3d plot
+    fig = px.scatter_3d(df_fitness_values, x="Strain_xx", y="Strain_yy", z="Strain_xy",
+                        color=['rgb({},{},{})'.format(r,g,b) for r,g,b in zip(df_fitness_values.R.values, df_fitness_values.G.values, df_fitness_values.B.values)])
+    fig.show(renderer='browser')
     
     return fitness_values, best_fitnesses, pop
 

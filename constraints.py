@@ -421,7 +421,7 @@ def grid_nprods(pBoards, pComponentsTop):
     return nprods_small, nprods_large, pBoards_diff
 
 
-def create_chromosome(nprods, pBoards, pComponentsTop, df_Probes, pBoards_diff, all_on=False, rod_type="All"):
+def create_chromosome(nprods, pBoards, pComponentsTop, df_Probes, pBoards_diff, all_on=False, on_prob=0.5, rod_type="All"):
     # Initialize random chromosome, where the first ncircles entries are
     # the x coordinates, the next ncircles entries are y coordinates, then
     # radii, and on/off binary values
@@ -472,7 +472,13 @@ def create_chromosome(nprods, pBoards, pComponentsTop, df_Probes, pBoards_diff, 
         if all_on:
             on = 1
         else:
-            on = random.randint(0,1)
+            # on_prob = 0.5   # Percentage chance of a pressure rod being on initially
+            on_chance = random.uniform(0,1)
+            if on_prob >= on_chance:
+                on = 1
+            else:
+                on = 0
+            # on = random.randint(0,1)
         prod = PressureRod(x,y,rod_types[rod_type_i],on)
         intersects_topcomponents = False
         intersects_topprobes = False
@@ -753,41 +759,40 @@ def validate_prods(prods_chosen, top_constraints):
     return valid
 
 
-def worker_function(result_queue,nprods,pBoards, pComponentsTop, df_Probes, pBoards_diff):
-    while True:
-        chromosome = create_chromosome(nprods, pBoards, pComponentsTop, df_Probes, pBoards_diff)
-        result_queue.put(chromosome)
+# def worker_function(result_queue,nprods,pBoards, pComponentsTop, df_Probes, pBoards_diff):
+#     while True:
+#         chromosome = create_chromosome(nprods, pBoards, pComponentsTop, df_Probes, pBoards_diff)
+#         result_queue.put(chromosome)
 
         
-def initialize_population_multiprocessing(nchromosomes, nprods, pBoards, pComponentsTop, df_Probes, pBoards_diff):
-    num_processes = multiprocessing.cpu_count()  # Number of available CPU cores
-    result_queue = multiprocessing.Queue()
+# def initialize_population_multiprocessing(nchromosomes, nprods, pBoards, pComponentsTop, df_Probes, pBoards_diff):
+#     num_processes = multiprocessing.cpu_count()  # Number of available CPU cores
+#     result_queue = multiprocessing.Queue()
     
-    # Create and start worker processes
-    processes = []
-    for _ in range(num_processes):
-        process = multiprocessing.Process(target=worker_function, args=(result_queue, nprods,pBoards, pComponentsTop, df_Probes, pBoards_diff))
-        process.start()
-        processes.append(process)
+#     # Create and start worker processes
+#     processes = []
+#     for _ in range(num_processes):
+#         process = multiprocessing.Process(target=worker_function, args=(result_queue, nprods,pBoards, pComponentsTop, df_Probes, pBoards_diff))
+#         process.start()
+#         processes.append(process)
         
-    # Wait for all worker processes to finish
-    for process in processes:
-        process.join()
+#     # Wait for all worker processes to finish
+#     for process in processes:
+#         process.join()
         
-    # Retrieve results from the result queue
-    initial_population = []
-    while not result_queue.empty():
-        chromosome = result_queue.get()
-        initial_population.append(chromosome)
+#     # Retrieve results from the result queue
+#     initial_population = []
+#     while not result_queue.empty():
+#         chromosome = result_queue.get()
+#         initial_population.append(chromosome)
         
-    return initial_population
+#     return initial_population
 
-def initialize_population_simple(npop, nprods, pBoards, pComponentsTop, df_Probes, pBoards_diff, all_on, rod_type):
+def initialize_population_simple(npop, nprods, pBoards, pComponentsTop, df_Probes, pBoards_diff, all_on, on_prob, rod_type):
     initial_population = []
     for i in range(npop):
-        initial_population.append(create_chromosome(nprods,pBoards,pComponentsTop,df_Probes,pBoards_diff,all_on, rod_type))
+        initial_population.append(create_chromosome(nprods, pBoards, pComponentsTop, df_Probes, pBoards_diff, all_on, on_prob, rod_type))
         print(f"Chromosome {i} of {npop} created")
-    # initial_population = [create_chromosome(nprods,pBoards,pComponentsTop,df_Probes,pBoards_diff) for _ in range(npop)] # Could this be modified to use multiprocessing? This will become very time intensive with larger populations
     return initial_population
 
 def interpret_chromosome_to_prods(chromosome, nprods):
