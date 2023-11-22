@@ -238,9 +238,10 @@ def mutation(pop, n_mutated, mutation_rate, nprods, top_constraints, all_on, on_
                                 break
                             
                             # Make sure the pressure rod isn't too close to any top probes
-                            if prod_new.tip_from_top_probe_buffer.intersects(top_probes):
-                                valid = False
-                                break
+                            if top_probes:
+                                if prod_new.tip_from_top_probe_buffer.intersects(top_probes):
+                                    valid = False
+                                    break
     
                             # If the pressure rod is turned off, it's automatically valid
                             if prod_new.on == 0:
@@ -292,11 +293,17 @@ def check_available_perturb_simple(child_prod, top_constraints):
     topcomponents = top_constraints[2]
     
     closest_pBoards_multi = nearest_points(child_prod.center, pBoards_multi)
-    closest_top_probes = nearest_points(child_prod.center, top_probes)
+    if top_probes:
+        closest_top_probes = nearest_points(child_prod.center, top_probes)
+    else:
+        closest_top_probes = np.nan
     closest_top_components = nearest_points(child_prod.center, topcomponents)
     
     dist_pBoards_multi = closest_pBoards_multi[0].distance(closest_pBoards_multi[1])
-    dist_top_probes = closest_top_probes[0].distance(closest_top_probes[1])
+    if top_probes:
+        dist_top_probes = closest_top_probes[0].distance(closest_top_probes[1])
+    else:
+        dist_top_probes = np.nan
     dist_top_components = closest_top_components[0].distance(closest_top_components[1])
     
     # Find the shortest distance
@@ -488,11 +495,12 @@ def local_search(pop, n_searched, localsearch_rate, on_prob, perturbrate, maxmag
                                         break
                                     
                                     # Make sure the pressure rod isn't too close to any top probes
-                                    if child_prods[j].tip_from_top_probe_buffer.intersects(top_probes):
-                                        print(f"Perturb for child {i}, pressure rod {j} was too close to a top side probe. Trying again.")
-                                        valid = False
-                                        attempt += 1
-                                        break
+                                    if top_probes:
+                                        if child_prods[j].tip_from_top_probe_buffer.intersects(top_probes):
+                                            print(f"Perturb for child {i}, pressure rod {j} was too close to a top side probe. Trying again.")
+                                            valid = False
+                                            attempt += 1
+                                            break
                                         
                                     # Make sure pressure rod doesn't conflict with any previously-placed pressure rods
                                     for k,prod_chosen in enumerate(child_prods):
@@ -562,9 +570,10 @@ def local_search(pop, n_searched, localsearch_rate, on_prob, perturbrate, maxmag
                                         continue
                                     
                                     # Make sure the pressure rod isn't too close to any top probes
-                                    if child_prods[j].tip_from_top_probe_buffer.intersects(top_probes):
-                                        valid = False
-                                        continue
+                                    if top_probes:
+                                        if child_prods[j].tip_from_top_probe_buffer.intersects(top_probes):
+                                            valid = False
+                                            continue
                                         
                                     # Make sure pressure rod doesn't conflict with any previously-placed pressure rods
                                     for k,prod_chosen in enumerate(child_prods):
@@ -660,7 +669,8 @@ def evaluation(pop, nobjs, gen, nprods, inputfile, constraint_geom):
     df_PressureRods = constraint_geom[14]
     df_Standoffs = constraint_geom[15]
     
-    ncpus = multiprocessing.cpu_count()
+    ncpus = 2
+    # ncpus = multiprocessing.cpu_count()
     
     prods = []
     valid_circles = []
@@ -985,7 +995,7 @@ def main_optimization():
     
     # Parameters
     print("Setting genetic algorithm parameters")
-    pop_size = 45              # initial number of chromosomes
+    pop_size = 50              # initial number of chromosomes
     rate_crossover = 15         # number of chromosomes that we apply crossover to
     rate_mutation = 15          # number of chromosomes that we apply mutation to
     chance_mutation = 0.2       # normalized percent chance that an individual pressure rod will be mutated
@@ -996,7 +1006,7 @@ def main_optimization():
     perturbrate = 1.0
     maxmag = 0.1             # coordinate displacement during local_search
     typerate = 0.1
-    maximum_generation = 20    # number of iterations
+    maximum_generation = 3    # number of iterations
     nobjs = 5
     
     nprods = 64
@@ -1008,7 +1018,7 @@ def main_optimization():
     design_accepted = False     # Flag for deciding whether to end optimization early if criteria are met
     
     print("Creating initial random population")
-    all_on = False
+    all_on = True
     rod_type = 'Press-Fit Tapered'
     # rod_types = ['Press-Fit Tapered',
     #              'Press-Fit Flat',
@@ -1065,37 +1075,37 @@ def main_optimization():
         ax.set_title(f"Generation: {i}")
         plt.show()
         
-        # # If the best fitness for each of the first three strain parameters 
-        # # are less than 500 microstrain, then end the optimization early
-        # if not design_accepted:
-        #     # Check if any row contains only values less than the threshold
-        #     condition = np.all(fitness_values < 500, axis=1)
-        #     # Get the row indices where the condition is true
-        #     indices = np.where(condition)[0]
-        #     if len(indices) > 0:
-        #         print("\nDesign found that meets minimum standard for strain:")
-        #         for index in indices:
-        #             print(f"\nDesign {index}:")
-        #             print(f"Strain xx:\t{fitness_values[index][0]}")
-        #             print(f"Strain yy:\t{fitness_values[index][1]}")
-        #             print(f"Strain xy:\t{fitness_values[index][2]}")
+        # If the best fitness for each of the first three strain parameters 
+        # are less than 500 microstrain, then end the optimization early
+        if not design_accepted:
+            # Check if any row contains only values less than the threshold
+            condition = np.all(fitness_values < 500, axis=1)
+            # Get the row indices where the condition is true
+            indices = np.where(condition)[0]
+            if len(indices) > 0:
+                print("\nDesign found that meets minimum standard for strain:")
+                for index in indices:
+                    print(f"\nDesign {index}:")
+                    print(f"Strain xx:\t{fitness_values[index][0]}")
+                    print(f"Strain yy:\t{fitness_values[index][1]}")
+                    print(f"Strain xy:\t{fitness_values[index][2]}")
                 
-        #         while True:
-        #             continue_optimizing = input("\nAccept best design and end optimization early? Y/N")
-        #             if continue_optimizing.lower() == "y":
-        #                 print("Designs accepted. Ending optimization")
-        #                 design_accepted = True
-        #                 break
-        #             elif continue_optimizing.lower() == "n":
-        #                 print(f"Designs not accepted. Continuing optimization until the prescribed {maximum_generation} generations are complete.")
-        #                 design_accepted = False
-        #                 break
-        #             else:
-        #                 print("Please enter Y or N to continue.")
-        #                 continue
+                while True:
+                    continue_optimizing = input("\nAccept best design and end optimization early? Y/N")
+                    if continue_optimizing.lower() == "y":
+                        print("Designs accepted. Ending optimization")
+                        design_accepted = True
+                        break
+                    elif continue_optimizing.lower() == "n":
+                        print(f"Designs not accepted. Continuing optimization until the prescribed {maximum_generation} generations are complete.")
+                        design_accepted = False
+                        break
+                    else:
+                        print("Please enter Y or N to continue.")
+                        continue
         
-        # if design_accepted:
-        #     break
+        if design_accepted:
+            break
     
     # 3D plot of optimization progression
     colnames = ["Strain_xx", "Strain_yy", "Strain_xy", "Principal_Strain_Min", "Principal_Strain_Max", "Generation"]
