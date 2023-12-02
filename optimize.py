@@ -1089,6 +1089,8 @@ def main_optimization():
                     print(f"Strain xx:\t{fitness_values[index][0]}")
                     print(f"Strain yy:\t{fitness_values[index][1]}")
                     print(f"Strain xy:\t{fitness_values[index][2]}")
+                    print(f"Principal strain min:\t{fitness_values[index][3]}")
+                    print(f"Principal strain max:\t{fitness_values[index][4]}")
                 
                 while True:
                     continue_optimizing = input("\nAccept best design and end optimization early? Y/N")
