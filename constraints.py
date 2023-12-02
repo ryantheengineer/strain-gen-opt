@@ -13,9 +13,9 @@ FROM THE XML DESIGN INPUT.
 
 from shapely.geometry import Point, Polygon, MultiPolygon
 from shapely.affinity import rotate, translate
-from shapely import buffer
+# from shapely import buffer
 from shapely.ops import unary_union
-import xmltodict
+# import xmltodict
 import pandas as pd
 import numpy as np
 import random
@@ -305,6 +305,7 @@ class PressureRod():
         self.rod_type = rod_type
         self.on = on
         self.ctc = 0.375
+        self.tip_from_UUT_edge = 0.0
         self.update_pressure_rod(self.x, self.y, self.rod_type, self.on)        
         
     def select_rod_type(self, rod_type):
@@ -329,21 +330,22 @@ class PressureRod():
     def update_pressure_rod(self, new_x, new_y, new_rod_type, new_on):
         self.x = new_x
         self.y = new_y
+        self.center = Point(new_x, new_y)
         self.select_rod_type(new_rod_type)
         self.rtip = self.dtip/2.0
         self.rtop = self.dtop/2.0
         self.tip = place_circle(new_x, new_y, self.rtip)
         self.top = place_circle(new_x, new_y, self.rtop)
-        self.tip_from_components = self.rtip + 0.0625
+        self.tip_from_components = self.rtip + 0.035
         self.top_from_components = self.rtop + 0.0625
-        self.tip_from_UUT_edge = self.rtip + 0.0
         self.tip_from_top_probes = self.rtip + 0.125
-        self.top_from_top_probes = self.rtop + 0.125
+        self.top_from_top_probes = self.rtop + 0.04
         self.tip_component_buffer = place_circle(new_x, new_y, self.rtip + self.tip_from_components)
         self.top_component_buffer = place_circle(new_x, new_y, self.rtop + self.top_from_components)
         self.tip_UUT_buffer = place_circle(new_x, new_y, self.rtip + self.tip_from_UUT_edge)
         self.tip_from_top_probe_buffer = place_circle(new_x, new_y, self.rtip + self.tip_from_top_probes)
         self.top_from_top_probe_buffer = place_circle(new_x, new_y, self.rtop + self.top_from_top_probes)
+        self.prod_to_prod_buffer = place_circle(new_x, new_y, self.rtop + 0.025)
         self.on = new_on
         
         
@@ -419,7 +421,7 @@ def grid_nprods(pBoards, pComponentsTop):
     return nprods_small, nprods_large, pBoards_diff
 
 
-def create_chromosome(nprods, pBoards, pComponentsTop, df_Probes, pBoards_diff):
+def create_chromosome(nprods, pBoards, pComponentsTop, df_Probes, pBoards_diff, all_on=False, on_prob=0.5, rod_type="All"):
     # Initialize random chromosome, where the first ncircles entries are
     # the x coordinates, the next ncircles entries are y coordinates, then
     # radii, and on/off binary values
@@ -457,32 +459,156 @@ def create_chromosome(nprods, pBoards, pComponentsTop, df_Probes, pBoards_diff):
     chromosome_rod_type = []
     chromosome_on = []
     prods_chosen = []
+    tries = 10
+    
     while len(chromosome_x) < nprods:
         valid = True
         x = random.uniform(xmin,xmax)
         y = random.uniform(ymin,ymax)
-        rod_type_i = random.randint(0,3)
-        on = random.randint(0,1)
+        if rod_type not in rod_types:
+            rod_type_i = random.randint(0,3)
+        else:
+            rod_type_i = rod_types.index(rod_type)
+        if all_on:
+            on = 1
+        else:
+            # on_prob = 0.5   # Percentage chance of a pressure rod being on initially
+            on_chance = random.uniform(0,1)
+            if on_prob >= on_chance:
+                on = 1
+            else:
+                on = 0
+            # on = random.randint(0,1)
         prod = PressureRod(x,y,rod_types[rod_type_i],on)
+        intersects_topcomponents = False
+        intersects_topprobes = False
+        centroids = []
+        perturbing = False
         
         # Make sure pressure rod is within the UUT and make sure it doesn't intersect any components, using the appropriate buffer sizes
-        if not prod.tip_UUT_buffer.within(pBoards_multi):
+        if not prod.center.intersects(pBoards_multi):
             continue
-        if prod.tip_component_buffer.intersects(topcomponents):
-            continue
+        # if not prod.center.within(pBoards_multi):
+        #     continue
         
-        # Make sure the pressure rod isn't too close to any top probes
+        ### TRYING MOVING AWAY FROM INTERSECTION VIOLATIONS TO SALVAGE DESIGN ###
+        # Gather status of currently placed prod
+        if prod.tip_component_buffer.intersects(topcomponents):
+            intersects_topcomponents = True
+            intersection_topcomponents = prod.tip_component_buffer.intersection(topcomponents)
+            
         if prod.tip_from_top_probe_buffer.intersects(top_probes):
+            intersects_topprobes = True
+            intersection_topprobes = prod.tip_from_top_probe_buffer.intersection(top_probes)
+        
+        # Parse the status of intersections
+        if not intersects_topcomponents and not intersects_topprobes:
+            pass
+        elif intersects_topcomponents and not intersects_topprobes:
+            perturbing = True
+            if intersection_topcomponents.geom_type == "Polygon":
+                centroids.append(intersection_topcomponents.centroid)
+            else:
+                for poly in intersection_topcomponents.geoms:
+                    centroids.append(poly.centroid)
+        elif not intersects_topcomponents and intersects_topprobes:
+            perturbing = True
+            if intersection_topprobes.geom_type == "Polygon":
+                centroids.append(intersection_topprobes.centroid)
+            else:
+                for poly in intersection_topprobes.geoms:
+                    centroids.append(poly.centroid)                    
+        else:
+            perturbing = True
+            # both top components and top probes are intersected by the current prod
+            if intersection_topcomponents.geom_type == "Polygon":
+                centroids.append(intersection_topcomponents.centroid)
+            else:
+                for poly in intersection_topcomponents.geoms:
+                    centroids.append(poly.centroid)
+                    
+            if intersection_topprobes.geom_type == "Polygon":
+                centroids.append(intersection_topprobes.centroid)
+            else:
+                for poly in intersection_topprobes.geoms:
+                    centroids.append(poly.centroid)
+        
+        if perturbing:                    
+            centroids_x = [centroid.x for centroid in centroids]
+            centroids_y = [centroid.y for centroid in centroids]
+            
+            avg_x = np.mean(centroids_x)
+            avg_y = np.mean(centroids_y)
+            
+            diff_x = prod.x - avg_x
+            diff_y = prod.y - avg_y
+            
+            mag_diff = np.sqrt(diff_x**2 + diff_y**2)
+            
+            unit_x = diff_x / mag_diff
+            unit_y = diff_y / mag_diff
+            
+            # print("")
+            # print("-"*60)
+            # print("PERTURBING PROD AWAY FROM INTERSECTION")
+            
+            for i in range(tries):
+                valid = True
+                prodxmin, prodymin, prodxmax, prodymax = prod.tip_component_buffer.bounds
+                stepsize = (prodxmax - prodxmin)/tries
+                new_x = prod.x + unit_x*stepsize
+                new_y = prod.y + unit_y*stepsize
+                
+                prod.update_pressure_rod(new_x, new_y, prod.rod_type, prod.on)
+                
+                topcomponent_intersection_area = prod.tip_component_buffer.intersection(topcomponents).area
+                top_probe_intersection_area = prod.tip_from_top_probe_buffer.intersection(top_probes).area
+                
+                # print(f"\n{topcomponent_intersection_area} intersection with top components")
+                # print(f"{top_probe_intersection_area} intersection with top probes")
+                
+                if not prod.center.intersects(pBoards_multi):
+                    valid = False
+                    continue                
+                if prod.tip_component_buffer.intersects(topcomponents):
+                    valid = False
+                    continue
+                if prod.tip_from_top_probe_buffer.intersects(top_probes):
+                    valid = False
+                    continue
+                
+                if valid == True:
+                    break
+                
+        if not prod.center.intersects(pBoards_multi):
+            valid = False
             continue
             
+        
+        
+        # ## END NEW CODE ###
+        
+        # # ## ORIGINAL CODE ###
+        # if prod.tip_component_buffer.intersects(topcomponents):
+        #     continue
+        
+        # # Make sure the pressure rod isn't too close to any top probes
+        # if prod.tip_from_top_probe_buffer.intersects(top_probes):
+        #     continue
+            
         # Make sure pressure rod doesn't conflict with any previously-placed pressure rods
-        for prod_chosen in prods_chosen:
-            dist = centroid_distance(prod.tip,prod_chosen.tip)
-            if dist < prod.ctc:
-                valid = False
-                break
-        if valid == False:
-            continue
+        if len(prods_chosen) > 0:
+            for prod_chosen in prods_chosen:
+                if prod_chosen.top.intersects(prod.top_from_top_probe_buffer):
+                    valid = False
+                    break
+                # dist = centroid_distance(prod.tip,prod_chosen.tip)
+                # if dist < prod.ctc:
+                #     valid = False
+                #     break
+            if valid == False:
+                continue
+        ### END ORIGINAL CODE ###
         
         if valid == True:
             prods_chosen.append(prod)
@@ -589,14 +715,9 @@ def validate_prod(prod, prods_chosen, top_constraints):
     xmin, ymin, xmax, ymax = pBoards_multi.bounds
     
     valid = True
-    # x = random.uniform(xmin,xmax)
-    # y = random.uniform(ymin,ymax)
-    # rod_type_i = random.randint(0,3)
-    # on = random.randint(0,1)
-    # prod = PressureRod(x,y,rod_types[rod_type_i],on)
     while True:        
         # Make sure pressure rod is within the UUT and make sure it doesn't intersect any components, using the appropriate buffer sizes
-        if not prod.tip_UUT_buffer.within(pBoards_multi):
+        if not prod.center.intersects(pBoards_multi):
             valid = False
             break
         if prod.tip_component_buffer.intersects(topcomponents):
@@ -615,10 +736,13 @@ def validate_prod(prod, prods_chosen, top_constraints):
             
         # Make sure pressure rod doesn't conflict with any previously-placed pressure rods
         for prod_chosen in prods_chosen:
-            dist = centroid_distance(prod.tip,prod_chosen.tip)
-            if dist < prod.ctc:
+            if prod_chosen.top.intersects(prod.top_from_top_probe_buffer):
                 valid = False
                 break
+            # dist = centroid_distance(prod.tip,prod_chosen.tip)
+            # if dist < prod.ctc:
+            #     valid = False
+            #     break
         if valid == False:
             break
         
@@ -635,37 +759,40 @@ def validate_prods(prods_chosen, top_constraints):
     return valid
 
 
-def worker_function(result_queue,nprods,pBoards, pComponentsTop, df_Probes, pBoards_diff):
-    while True:
-        chromosome = create_chromosome(nprods, pBoards, pComponentsTop, df_Probes, pBoards_diff)
-        result_queue.put(chromosome)
+# def worker_function(result_queue,nprods,pBoards, pComponentsTop, df_Probes, pBoards_diff):
+#     while True:
+#         chromosome = create_chromosome(nprods, pBoards, pComponentsTop, df_Probes, pBoards_diff)
+#         result_queue.put(chromosome)
 
         
-def initialize_population_multiprocessing(nchromosomes, nprods, pBoards, pComponentsTop, df_Probes, pBoards_diff):
-    num_processes = multiprocessing.cpu_count()  # Number of available CPU cores
-    result_queue = multiprocessing.Queue()
+# def initialize_population_multiprocessing(nchromosomes, nprods, pBoards, pComponentsTop, df_Probes, pBoards_diff):
+#     num_processes = multiprocessing.cpu_count()  # Number of available CPU cores
+#     result_queue = multiprocessing.Queue()
     
-    # Create and start worker processes
-    processes = []
-    for _ in range(num_processes):
-        process = multiprocessing.Process(target=worker_function, args=(result_queue,nprods,pBoards, pComponentsTop, df_Probes, pBoards_diff))
-        process.start()
-        processes.append(process)
+#     # Create and start worker processes
+#     processes = []
+#     for _ in range(num_processes):
+#         process = multiprocessing.Process(target=worker_function, args=(result_queue, nprods,pBoards, pComponentsTop, df_Probes, pBoards_diff))
+#         process.start()
+#         processes.append(process)
         
-    # Wait for all worker processes to finish
-    for process in processes:
-        process.join()
+#     # Wait for all worker processes to finish
+#     for process in processes:
+#         process.join()
         
-    # Retrieve results from the result queue
-    initial_population = []
-    while not result_queue.empty():
-        chromosome = result_queue.get()
-        initial_population.append(chromosome)
+#     # Retrieve results from the result queue
+#     initial_population = []
+#     while not result_queue.empty():
+#         chromosome = result_queue.get()
+#         initial_population.append(chromosome)
         
-    return initial_population
+#     return initial_population
 
-def initialize_population_simple(npop, nprods, pBoards, pComponentsTop, df_Probes, pBoards_diff):
-    initial_population = [create_chromosome(nprods,pBoards,pComponentsTop,df_Probes,pBoards_diff) for _ in range(npop)] # Could this be modified to use multiprocessing? This will become very time intensive with larger populations
+def initialize_population_simple(npop, nprods, pBoards, pComponentsTop, df_Probes, pBoards_diff, all_on, on_prob, rod_type):
+    initial_population = []
+    for i in range(npop):
+        initial_population.append(create_chromosome(nprods, pBoards, pComponentsTop, df_Probes, pBoards_diff, all_on, on_prob, rod_type))
+        print(f"Chromosome {i} of {npop} created")
     return initial_population
 
 def interpret_chromosome_to_prods(chromosome, nprods):
@@ -801,25 +928,145 @@ def runFEA_valid_circles(valid_circles, df_PressureRods, root, inputfile, gen, i
     # Set the salesOrder field (used in naming the output folder) to include
     # generation and iteration numbers
     salesOrder = root.find('.//salesOrder')
-    salesOrder.text = f"GEN{gen}ITER{iteration}"
+    salesOrder.text = f"GEN{gen}_ITER{iteration}"
     
     # Write the new element tree
     tree = ET.ElementTree(root)
     ET.indent(tree, '  ')
-    new_filename = "FEA_random_pressure_rods.xml"
+    new_filename = f"FEA_GEN{gen}_ITER{iteration}.xml"
     path, filename = os.path.split(inputfile)
     new_path = path + "/" + new_filename
     tree.write(new_path)
     
     FEApath = runFEA.loadFEApath('FEApath.pk')
-    runFEA.runFEA(FEApath, new_path)
+    exit_code = runFEA.runFEA(FEApath, new_path)
     
-    dfmesh = runFEA.resultsToDataframe(inputfile)
+    # results = (gen, iteration)
+    
+    return (exit_code)
+    
+
+def read_FEA_results(root, inputfile, gen, iteration):
+    # Write the new element tree
+    tree = ET.ElementTree(root)
+    ET.indent(tree, '  ')
+    new_filename = f"FEA_GEN{gen}_ITER{iteration}.xml"
+    path, filename = os.path.split(inputfile)
+    new_path = path + "/" + new_filename
+    
+    dfmesh = runFEA.resultsToDataframe(new_path)
     
     strain_xx, strain_yy, strain_xy, principalStrain_min, principalStrain_max = runFEA.getFitness(dfmesh)
     
-    return strain_xx, strain_yy, strain_xy, principalStrain_min, principalStrain_max
+    results = (strain_xx, strain_yy, strain_xy, principalStrain_min, principalStrain_max)
     
+    return results
+    
+
+def design_to_xml(valid_circles, df_PressureRods, root, inputfile, gen, iteration):
+    # Ensure correct type is used for integer columns
+    df_PressureRods['unimplemented1'] = df_PressureRods['unimplemented1'].astype(int)
+    df_PressureRods['unimplemented2'] = df_PressureRods['unimplemented2'].astype(int)
+    df_PressureRods['unimplemented3'] = df_PressureRods['unimplemented3'].astype(int)
+    df_PressureRods['unimplemented4'] = df_PressureRods['unimplemented4'].astype(int)
+    df_PressureRods['unimplemented5'] = df_PressureRods['unimplemented5'].astype(str)
+    df_PressureRods['unimplemented5'] = df_PressureRods['unimplemented5'].apply(str.lower)
+    df_PressureRods['unimplemented6'] = df_PressureRods['unimplemented6'].astype(int)
+    df_PressureRods['unimplemented7'] = df_PressureRods['unimplemented7'].astype(int)
+    df_PressureRods['unimplemented8'] = df_PressureRods['unimplemented8'].astype(int)
+    df_PressureRods['unimplemented10'] = df_PressureRods['unimplemented10'].astype(int)
+    df_PressureRods['unimplemented11'] = df_PressureRods['unimplemented11'].astype(int)
+    df_PressureRods['type'] = df_PressureRods['type'].astype(str)
+    df_PressureRods['unimplemented12'] = df_PressureRods['unimplemented12'].astype(str)
+    df_PressureRods['unimplemented12'] = df_PressureRods['unimplemented12'].apply(str.lower)
+    df_PressureRods['unimplemented13'] = df_PressureRods['unimplemented13'].astype(int)
+    
+    df = df_PressureRods.loc[0,:]
+    basic_vals = {}
+    for col in df.index:
+        basic_vals[col] = df[col]
+    # new_vals = [[] for col in df.index]
+    
+    xnew = []
+    ynew = []
+    for valid_circle in valid_circles:
+        xnew.append(valid_circle.centroid.x)
+        ynew.append(valid_circle.centroid.y)
+    
+    newdata = {}
+    for col in df.index:
+        if col == "x":
+            newdata[col] = xnew
+        elif col == "y":
+            newdata[col] = ynew
+        else:
+            newdata[col] = [basic_vals[col] for valid_circle in valid_circles]
+            
+    df_PressureRods_update = pd.DataFrame(newdata)
+    
+    # Get the rows of df_PressureRods_update as a list of strings
+    vals = df_PressureRods_update.to_string(header=False,
+                  index=False,
+                  index_names=False).split('\n')
+    for j,row in enumerate(vals):
+        splitrow = row.split()
+        newrow = []
+        for i,ele in enumerate(splitrow):
+            if i==13:
+                newrow.append(' '.join(splitrow[13:15]))
+            elif i==14:
+                continue
+            elif i==18:
+                newrow.append(''.join(splitrow[18:]))
+            elif i==19:
+                continue
+            elif i==20:
+                continue
+            else:
+                newrow.append(ele)
+        newrow = '|'.join(newrow)
+        vals[j] = newrow
+    # vals = ['|'.join(ele.split()) for ele in x
+    
+    # Delete the XML rows that need to be replaced
+    rows = root.find('.//table[@identifier="PressureRods"].//rows')
+    del rows[:]
+    
+    rowlist = [ET.SubElement(rows,'row') for val in vals]
+
+    for i,val in enumerate(vals):
+        rowlist[i].text = val
+    
+    # Set the salesOrder field (used in naming the output folder) to include
+    # generation and iteration numbers
+    salesOrder = root.find('.//salesOrder')
+    salesOrder.text = f"GEN{gen}_ITER{iteration}"
+    
+    # Write the new element tree
+    tree = ET.ElementTree(root)
+    ET.indent(tree, '  ')
+    new_filename = f"FEA_GEN{gen}_ITER{iteration}.xml"
+    path, filename = os.path.split(inputfile)
+    new_path = path + "/" + new_filename
+    tree.write(new_path)
+    
+    return new_path
+
+
+def runFEA_new_path(new_path_xml):
+    # Simplified and separated method that should run off a separately created XML file
+    FEApath = runFEA.loadFEApath('FEApath.pk')
+    runFEA.runFEA(FEApath, new_path_xml)
+    
+    dfmesh = runFEA.resultsToDataframe(new_path_xml)
+    
+    strain_xx, strain_yy, strain_xy, principalStrain_min, principalStrain_max = runFEA.getFitness(dfmesh)
+    
+    results = (strain_xx, strain_yy, strain_xy, principalStrain_min, principalStrain_max)
+    
+    return results
+    
+
 
 # %% Utility functions
 def plot_poly_list_w_holes(poly_list, fig, ax, color, linestyle, label):

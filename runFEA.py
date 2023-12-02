@@ -12,6 +12,8 @@ import pandas as pd
 from tkinter import Tk
 from tkinter import filedialog as fd
 import pickle
+import re
+from datetime import datetime
 
 def chooseFEApath(initialdir):
     filetypes = (("Executable", ["*.exe"]),)
@@ -38,30 +40,76 @@ def loadFEApath(filename):
     return FEApath
 
 def runFEA(FEApath, inputfile):
-    args = [FEApath, inputfile]
-    subprocess.call(args, shell=False)
+    # directory = pathlib.Path(inputfile)
+    # directory = str(directory.parent) + "\Output"
+    # args = [FEApath, f"/input {inputfile}", "/noprogressbar"]
+    # # args = [FEApath, f"/input {inputfile}", f"/output {directory}", "/noprogressbar"]
+    # exit_code = subprocess.call(args, shell=False)
+    # if exit_code == 0:
+    #     print(f"{inputfile} ran successfully")
+    # else:
+    #     print(f"{inputfile} failed with code {exit_code}")
+    # return exit_code
+      
+    args = f'/input "{inputfile}" /noprogressbar'
+    command = f'"{FEApath}" {args}'
+    result = subprocess.run(command)
+    if result.returncode == 0:
+        print(f"{inputfile} ran successfully")
+    else:
+        print(f"{inputfile} failed with code {result.returncode}")
+    return result.returncode
+
+def find_latest_folder_with_substring(base_dir, substring):
+    latest_folder = None
+    latest_timestamp = None
+
+    # Iterate through the folders in the base directory
+    for folder_name in os.listdir(base_dir):
+        folder_path = os.path.join(base_dir, folder_name)
+
+        # Check if the folder name contains the specified substring
+        if substring in folder_name:
+            # Extract the timestamp from the folder name using regex
+            timestamp_match = re.search(r'(\d{8}-\d{4})', folder_name)
+            if timestamp_match:
+                timestamp_str = timestamp_match.group(1)
+                timestamp = datetime.strptime(timestamp_str, "%Y%m%d-%H%M")
+
+                # Compare the timestamp with the latest one found
+                if latest_timestamp is None or timestamp > latest_timestamp:
+                    latest_timestamp = timestamp
+                    latest_folder = folder_path
+
+    return latest_folder
 
 def resultsToDataframe(inputfile):
     directory = pathlib.Path(inputfile)
     directory = str(directory.parent) + "\Output"
+    path, filename = os.path.split(inputfile)
+    filename = os.path.splitext(filename)[0]
     
-    # Get the most recently modified subdirectory
-    latest_subdir = max(glob.glob(os.path.join(directory, '*/')), key=os.path.getmtime)
+    # Get the most recently modified subdirectory that matches the needed substring from the inputfile
+    latest_subdir = find_latest_folder_with_substring(directory, filename)
+    # latest_subdir = max(glob.glob(os.path.join(directory, f'{filename}*/')), key=os.path.getmtime) # FIXME: Can't use this method with multiprocessing - gives multiple fitnesses that are identical
+    # latest_subdir = max(glob.glob(os.path.join(directory, '*/')), key=os.path.getmtime) # FIXME: Can't use this method with multiprocessing - gives multiple fitnesses that are identical
     
-    meshfile = latest_subdir + "FEA_MeshNodes.csv"
+    meshfile = latest_subdir + "\\FEA_MeshNodes.csv"
     
     df = pd.read_csv(meshfile)
     return df
 
 def getFitness(dfmesh):
     # abssums = dfmesh.abs().sum()
-    absmeans = dfmesh.abs().mean()
+    # absmeans = dfmesh.abs().mean()
+    absmax = dfmesh.abs().max()
     # stdevs = dfmesh.std()
-    strain_xx = absmeans["strain_xx"]
-    strain_yy = absmeans["strain_yy"]
-    strain_xy = absmeans["strain_xy"]
-    principalStrain_min = absmeans["principalStrain_min"]
-    principalStrain_max = absmeans["principalStrain_max"]
+    strain_xx = absmax["strain_xx"]
+    strain_yy = absmax["strain_yy"]
+    strain_xy = absmax["strain_xy"]
+    
+    principalStrain_min = absmax["principalStrain_min"]
+    principalStrain_max = absmax["principalStrain_max"]
     return strain_xx, strain_yy, strain_xy, principalStrain_min, principalStrain_max
     
 
