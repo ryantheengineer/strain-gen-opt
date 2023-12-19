@@ -25,7 +25,7 @@ import plotly.express as px
 
 # On each iteration, out of 2 randomly selected parents we create 2 offspring
 # by taking some genes from one parent and the rest from another parent
-def crossover_prods(pop, crossover_rate, nprods, top_constraints):
+def crossover_prods(pop, crossover_rate, nprods_top, nprods_bot, top_constraints, bot_constraints):
     """
     Custom crossover function, using the pressure rod representation of each
     chromosome (individual design).
@@ -63,8 +63,10 @@ def crossover_prods(pop, crossover_rate, nprods, top_constraints):
             parent2 = pop[r2]
             
             # Interpret each parent into PressureRod representation
-            parent1_prods = constraints.interpret_chromosome_to_prods(parent1, nprods)
-            parent2_prods = constraints.interpret_chromosome_to_prods(parent2, nprods)
+            parent1_prods = constraints.interpret_chromosome_to_prods_v2(parent1, nprods_top, nprods_bot)
+            parent2_prods = constraints.interpret_chromosome_to_prods_v2(parent2, nprods_top, nprods_bot)
+            # parent1_prods = constraints.interpret_chromosome_to_prods(parent1, nprods)
+            # parent2_prods = constraints.interpret_chromosome_to_prods(parent2, nprods)
             
             # Perform crossover on PressureRod representation, with the understanding
             # that both parents were previously validated against all constraints,
@@ -72,7 +74,7 @@ def crossover_prods(pop, crossover_rate, nprods, top_constraints):
             # rods are too close together.
             child_prods = copy.deepcopy(parent1_prods)
             
-            crossover_point = np.random.randint(1, nprods)
+            crossover_point = np.random.randint(1, nprods_top+nprods_bot)
             
             for j in range(0, crossover_point):
                 # Get gene at position j from parent 2
@@ -84,6 +86,11 @@ def crossover_prods(pop, crossover_rate, nprods, top_constraints):
                 idx_violated = []
                 for k,prod in enumerate(child_prods):
                     if k == j:
+                        continue
+                    # Don't compare distances for pressure rods that are top side versus bottom side
+                    if j < nprods_top and k >= nprods_top:
+                        continue
+                    if j >= nprods_top and k < nprods_top:
                         continue
                     dist = constraints.centroid_distance(child_prods[j].tip, prod.tip)
                     if dist < prod.ctc:
@@ -104,20 +111,21 @@ def crossover_prods(pop, crossover_rate, nprods, top_constraints):
                     break
             
         # Interpret the child back to chromosome form
-        child_chromosome = constraints.interpret_prods_to_chromosome(child_prods)
+        child_chromosome = constraints.interpret_prods_to_chromosome_v2(child_prods, nprods_top, nprods_bot)
+        # child_chromosome = constraints.interpret_prods_to_chromosome(child_prods)
         offspring[i, :] = child_chromosome
         
-        # # Plot the parent and child designs for examination
-        # constraints.plot_prods_top_constraints(parent1_prods, top_constraints, f"Crossover - Offspring {i}: Parent 1")
-        # constraints.plot_prods_top_constraints(parent2_prods, top_constraints, f"Crossover - Offspring {i}: Parent 2")
-        # constraints.plot_prods_top_constraints(child_prods, top_constraints, f"Crossover - Offspring {i}: Child")
-        # plt.show()
+        # Plot the parent and child designs for examination
+        constraints.plot_prods_top_constraints(parent1_prods, top_constraints, f"Crossover - Offspring {i}: Parent 1")
+        constraints.plot_prods_top_constraints(parent2_prods, top_constraints, f"Crossover - Offspring {i}: Parent 2")
+        constraints.plot_prods_top_constraints(child_prods, top_constraints, f"Crossover - Offspring {i}: Child")
+        plt.show()
         
     return offspring
 
 
 # Perform crossover with mutation
-def mutation(pop, n_mutated, mutation_rate, nprods, top_constraints, all_on, on_prob, rod_type):
+def mutation(pop, n_mutated, mutation_rate, nprods_top, nprods_bot, top_constraints, bot_constraints, all_on, on_prob, rod_type):
     """
     Mutation function. Works like crossover, but with the opportunity for
     genes to randomly be changed.
@@ -157,8 +165,10 @@ def mutation(pop, n_mutated, mutation_rate, nprods, top_constraints, all_on, on_
             parent2 = pop[r2]
             
             # Interpret each parent into PressureRod representation
-            parent1_prods = constraints.interpret_chromosome_to_prods(parent1, nprods)
-            parent2_prods = constraints.interpret_chromosome_to_prods(parent2, nprods)
+            parent1_prods = constraints.interpret_chromosome_to_prods_v2(parent1, nprods_top, nprods_bot)
+            parent2_prods = constraints.interpret_chromosome_to_prods_v2(parent2, nprods_top, nprods_bot)
+            # parent1_prods = constraints.interpret_chromosome_to_prods(parent1, nprods)
+            # parent2_prods = constraints.interpret_chromosome_to_prods(parent2, nprods)
             
             # Perform crossover on PressureRod representation, with the understanding
             # that both parents were previously validated against all constraints,
@@ -166,7 +176,7 @@ def mutation(pop, n_mutated, mutation_rate, nprods, top_constraints, all_on, on_
             # rods are too close together.
             child_prods = copy.deepcopy(parent1_prods)
             
-            crossover_point = np.random.randint(1, nprods)
+            crossover_point = np.random.randint(1, nprods_top+nprods_bot)
             
             for j in range(0, crossover_point):
                 # Get gene at position j from parent 2
@@ -178,6 +188,11 @@ def mutation(pop, n_mutated, mutation_rate, nprods, top_constraints, all_on, on_
                 idx_violated = []
                 for k,prod in enumerate(child_prods):
                     if k == j:
+                        continue
+                    # Don't compare distances for pressure rods that are top side versus bottom side
+                    if j < nprods_top and k >= nprods_top:
+                        continue
+                    if j >= nprods_top and k < nprods_top:
                         continue
                     dist = constraints.centroid_distance(child_prods[j].tip, prod.tip)
                     if dist < prod.ctc:
@@ -276,7 +291,8 @@ def mutation(pop, n_mutated, mutation_rate, nprods, top_constraints, all_on, on_
                     break
             
         # Interpret the child back to chromosome form
-        child_chromosome = constraints.interpret_prods_to_chromosome(child_prods)
+        child_chromosome  = constraints.interpret_prods_to_chromosome_v2(child_prods, nprods_top, nprods_bot)
+        # child_chromosome = constraints.interpret_prods_to_chromosome(child_prods)
         offspring[i, :] = child_chromosome
         
         # # Plot the parent and child designs for examination
@@ -286,6 +302,34 @@ def mutation(pop, n_mutated, mutation_rate, nprods, top_constraints, all_on, on_
         # plt.show()
 
     return offspring    # arr(mutation_size x n_var)
+
+def check_available_perturb_simple_v2(child_prod, side_constraints):
+    pBoards_multi = side_constraints[0]
+    side_probes = side_constraints[1]
+    sidecomponents = side_constraints[2]
+    
+    closest_pBoards_multi = nearest_points(child_prod.center, pBoards_multi)
+    if side_probes:
+        closest_side_probes = nearest_points(child_prod.center, side_probes)
+    else:
+        closest_side_probes = np.nan
+    closest_side_components = nearest_points(child_prod.center, sidecomponents)
+    
+    dist_pBoards_multi = closest_pBoards_multi[0].distance(closest_pBoards_multi[1])
+    if side_probes:
+        dist_side_probes = closest_side_probes[0].distance(closest_side_probes[1])
+    else:
+        dist_side_probes = np.nan
+    dist_side_components = closest_side_components[0].distance(closest_side_components[1])
+    
+    # Find the shortest distance
+    shortest_dist = min([dist_pBoards_multi, dist_side_probes, dist_side_components])
+    max_dist = shortest_dist - child_prod.tip_from_components
+    
+    if max_dist <= 0:
+        max_dist = np.abs(max_dist)
+        
+    return max_dist
 
 def check_available_perturb_simple(child_prod, top_constraints):
     pBoards_multi = top_constraints[0]
@@ -318,7 +362,7 @@ def check_available_perturb_simple(child_prod, top_constraints):
 
 # Create some amount of offspring Q by adding fixed coordinate displacement to some 
 # randomly selected parent's genes/coordinates
-def local_search(pop, n_searched, localsearch_rate, on_prob, perturbrate, maxmag, typerate, nprods, top_constraints, all_on, rod_type):
+def local_search(pop, n_searched, localsearch_rate, on_prob, perturbrate, maxmag, typerate, nprods_top, nprods_bot, top_constraints, bot_constraints, all_on, rod_type):
     """
     Create offspring by adding coordinate displacement to randomly selected
     genes in parent designs.
@@ -360,7 +404,8 @@ def local_search(pop, n_searched, localsearch_rate, on_prob, perturbrate, maxmag
             parent1 = pop[r1]
             
             # Interpret each parent into PressureRod representation
-            parent1_prods = constraints.interpret_chromosome_to_prods(parent1, nprods)
+            parent1_prods = constraints.interpret_chromosome_to_prods_v2(parent1, nprods_top, nprods_bot)
+            # parent1_prods = constraints.interpret_chromosome_to_prods(parent1, nprods)
             child_prods = copy.deepcopy(parent1_prods)
             
             
@@ -371,8 +416,17 @@ def local_search(pop, n_searched, localsearch_rate, on_prob, perturbrate, maxmag
             pBoards_multi = top_constraints[0]
             top_probes = top_constraints[1]
             topcomponents = top_constraints[2]
+            bot_probes = bot_constraints[1]
+            botcomponents = bot_constraints[2]
+            
             xmin, ymin, xmax, ymax = pBoards_multi.bounds
             for j in range(len(child_prods)):
+                if j < nprods_top:
+                    sidenum = 1
+                    side_constraints = copy.deepcopy(top_constraints)
+                else:
+                    sidenum = 2
+                    side_constraints = copy.deepcopy(bot_constraints)
                 chance = random.uniform(0,1)
                 if localsearch_rate > chance:
                     if not all_on:
@@ -440,7 +494,11 @@ def local_search(pop, n_searched, localsearch_rate, on_prob, perturbrate, maxmag
                                         break
                                     # Position perturb first
                                     # Updated maxmag
-                                    maxmag_new = check_available_perturb_simple(child_prods[j], top_constraints)
+                                    if sidenum == 1:
+                                        maxmag_new = check_available_perturb_simple_v2(child_prods[j], top_constraints)
+                                    else:
+                                        maxmag_new = check_available_perturb_simple_v2(child_prods[j], bot_constraints)                                        
+                                    # maxmag_new = check_available_perturb_simple(child_prods[j], top_constraints)
                                     maxmag_new = min([maxmag,maxmag_new])
                                     # print(f"\nmaxmag:\t{maxmag}")
                                     # print(f"maxmag_new:\t{maxmag_new}")
@@ -488,11 +546,19 @@ def local_search(pop, n_searched, localsearch_rate, on_prob, perturbrate, maxmag
                                     # if not child_prods[j].tip_UUT_buffer.within(pBoards_multi):
                                     #     valid = False
                                     #     break
-                                    if child_prods[j].tip_component_buffer.intersects(topcomponents):
-                                        print(f"Perturb for child {i}, pressure rod {j} was too close to a top side component. Trying again.")
-                                        valid = False
-                                        attempt += 1
-                                        break
+                                    if sidenum == 1:
+                                        if child_prods[j].tip_component_buffer.intersects(topcomponents):
+                                            print(f"Perturb for child {i}, pressure rod {j} was too close to a top side component. Trying again.")
+                                            valid = False
+                                            attempt += 1
+                                            break
+                                    else:
+                                        if child_prods[j].tip_component_buffer.intersects(botcomponents):
+                                            print(f"Perturb for child {i}, pressure rod {j} was too close to a bottom side component. Trying again.")
+                                            valid = False
+                                            attempt += 1
+                                            break
+                                        
                                     
                                     # Make sure the pressure rod isn't too close to any top probes
                                     if top_probes:
@@ -501,11 +567,23 @@ def local_search(pop, n_searched, localsearch_rate, on_prob, perturbrate, maxmag
                                             valid = False
                                             attempt += 1
                                             break
+                                    if bot_probes:
+                                        if child_prods[j].tip_from_top_probe_buffer.intersects(bot_probes):
+                                            print(f"Perturb for child {i}, pressure rod {j} was too close to a bottom side probe. Trying again.")
+                                            valid = False
+                                            attempt += 1
+                                            break
+                                        
                                         
                                     # Make sure pressure rod doesn't conflict with any previously-placed pressure rods
                                     for k,prod_chosen in enumerate(child_prods):
                                         if k == j:
                                             # Don't compare against the current pressure rod
+                                            continue
+                                        # If the pressure rod in question is a top side pressure rod, only compare to top side pressure rods
+                                        if j < nprods_top and k >= nprods_top:
+                                            continue
+                                        if j >= nprods_top and k < nprods_top:
                                             continue
                                         dist = constraints.centroid_distance(child_prods[j].tip, prod_chosen.tip)
                                         if dist < child_prods[j].ctc:
@@ -667,7 +745,8 @@ def evaluation(pop, nobjs, gen, nprods, inputfile, constraint_geom):
     df_Probes = constraint_geom[12]
     df_GuidePins = constraint_geom[13]
     df_PressureRods = constraint_geom[14]
-    df_Standoffs = constraint_geom[15]
+    df_BoardStops = constraint_geom[15]
+    df_Standoffs = constraint_geom[16]
     
     ncpus = 2
     # ncpus = multiprocessing.cpu_count()
@@ -691,7 +770,7 @@ def evaluation(pop, nobjs, gen, nprods, inputfile, constraint_geom):
     # Multiprocessing version
     pool = multiprocessing.Pool(processes=ncpus)
     # arg_tuples = [(xml_filenames[i]) for i in range(pop.shape[0])]
-    arg_tuples = [(valid_circles[i], df_PressureRods, root, inputfile, gen, i) for i in range(pop.shape[0])]
+    arg_tuples = [(valid_circles[i], df_PressureRods, df_BoardStops, root, inputfile, gen, i) for i in range(pop.shape[0])]
     # arg_tuples = [(valid_circles[i], df_PressureRods, root, xml_filenames[i], gen, i) for i in range(pop.shape[0])]
     # results_mp = pool.starmap(constraints.runFEA_new_path, arg_tuples)
     results_mp = pool.starmap(constraints.runFEA_valid_circles, arg_tuples)
@@ -724,7 +803,8 @@ def evaluation(pop, nobjs, gen, nprods, inputfile, constraint_geom):
     
         for i in missing_iterations:
             print(f"Rerun of FEA_GEN{gen}_ITER{i}")
-            exit_code = constraints.runFEA_valid_circles(valid_circles[i], df_PressureRods, root, inputfile, gen, i)
+            exit_code = constraints.runFEA_valid_circles(valid_circles[i], df_PressureRods, df_BoardStops, root, inputfile, gen, i)
+            # exit_code = constraints.runFEA_valid_circles(valid_circles[i], df_PressureRods, root, inputfile, gen, i)
             successful.append(exit_code)
             
         if all(element == 0 for element in successful):
@@ -989,15 +1069,17 @@ def main_optimization():
     
     # Estimate a number of pressure rods for the top side that would make sense
     # print("--- Estimating possible pressure rods ---")
-    nprods_small, nprods_large, pBoards_diff = constraints.grid_nprods(pBoards,pComponentsTop)
+    nprods_small, nprods_large, pBoards_diff = constraints.grid_nprods(pBoards,pComponentsTop) # FIXME: Need to make this consider bottom side pressure rods
     
-    top_constraints = constraints.get_top_constraints(pBoards, pComponentsTop, df_Probes, pBoards_diff)
+    # top_constraints = constraints.get_top_constraints(pBoards, pComponentsTop, df_Probes, pBoards_diff)
+    top_constraints = constraints.get_board_constraints_single_side(pBoards, pComponentsTop, 1, df_Probes, pBoards_diff)
+    bot_constraints = constraints.get_board_constraints_single_side(pBoards, pComponentsBot, 2, df_Probes, pBoards_diff)
     
     # Parameters
     print("Setting genetic algorithm parameters")
-    pop_size = 50              # initial number of chromosomes
-    rate_crossover = 15         # number of chromosomes that we apply crossover to
-    rate_mutation = 15          # number of chromosomes that we apply mutation to
+    pop_size = 30              # initial number of chromosomes
+    rate_crossover = 10         # number of chromosomes that we apply crossover to
+    rate_mutation = 10         # number of chromosomes that we apply mutation to
     chance_mutation = 0.2       # normalized percent chance that an individual pressure rod will be mutated
     n_searched = 15              # number of chromosomes that we apply local_search to
     chance_localsearch = 0.2
@@ -1006,10 +1088,24 @@ def main_optimization():
     perturbrate = 1.0
     maxmag = 0.1             # coordinate displacement during local_search
     typerate = 0.1
-    maximum_generation = 3    # number of iterations
+    maximum_generation = 12    # number of iterations
     nobjs = 5
     
+    end_early = True
+    
+    
     nprods = 64
+    nprods_top = 64
+    nprods_bot = 0
+    print(f"nprods_small = {nprods_small}")
+    print(f"nprods_large = {nprods_large}")
+    nprods_top_input = input(f"Current nprods_top: {nprods_top}\n If this quantity is adequate press enter. Otherwise choose an integer value and press enter.\n")
+    if len(nprods_top_input) == 0:
+        print(f"\nCurrent value of {nprods_top} accepted.")
+        pass
+    else:
+        nprods_top = int(nprods_top_input)
+        print(f"New value of {nprods_top} accepted.")
     # nprods = 40
     # nprods = nprods_small
     # nprods = len(df_PressureRods)
@@ -1024,7 +1120,8 @@ def main_optimization():
     #              'Press-Fit Flat',
     #              '3.325" Tapered',
     #              '3.325" Flat']
-    pop = constraints.initialize_population_simple(pop_size, nprods, pBoards, pComponentsTop, df_Probes, pBoards_diff, all_on, on_prob_initial, rod_type)    # initial parents population P
+    pop = constraints.initialize_population_simple_v2(pop_size, nprods_top, nprods_bot, top_constraints, bot_constraints, all_on, on_prob, rod_type)    # initial parents population P
+    # pop = constraints.initialize_population_simple(pop_size, nprods, pBoards, pComponentsTop, df_Probes, pBoards_diff, all_on, on_prob_initial, rod_type)    # initial parents population P
     pop = np.asarray(pop)
     end_setup_time = time.time()
     
@@ -1035,9 +1132,10 @@ def main_optimization():
     # NSGA-II main loop
     for i in range(maximum_generation):
         print('\n\nGeneration:', i)
-        offspring_from_crossover = crossover_prods(pop, rate_crossover, nprods, top_constraints)
-        offspring_from_mutation = mutation(pop, rate_mutation, chance_mutation, nprods, top_constraints, all_on, on_prob, rod_type)
-        offspring_from_local_search = local_search(pop, n_searched, chance_localsearch, on_prob, perturbrate, maxmag, typerate, nprods, top_constraints, all_on, rod_type)
+        offspring_from_crossover = crossover_prods(pop, rate_crossover, nprods_top, nprods_bot, top_constraints, bot_constraints)
+        offspring_from_mutation = mutation(pop, rate_mutation, chance_mutation, nprods_top, nprods_bot, top_constraints, bot_constraints, all_on, on_prob, rod_type)
+        offspring_from_local_search = local_search(pop, n_searched, chance_localsearch, on_prob, perturbrate, maxmag, typerate, nprods_top, nprods_bot, top_constraints, bot_constraints, all_on, rod_type)
+        # offspring_from_local_search = local_search(pop, n_searched, chance_localsearch, on_prob, perturbrate, maxmag, typerate, nprods, top_constraints, all_on, rod_type)
         
         # Append children (crossover, mutation, local search) to parents
         pop = np.append(pop, offspring_from_crossover, axis=0)
@@ -1093,18 +1191,22 @@ def main_optimization():
                     print(f"Principal strain max:\t{fitness_values[index][4]}")
                 
                 while True:
-                    continue_optimizing = input("\nAccept best design and end optimization early? Y/N")
-                    if continue_optimizing.lower() == "y":
-                        print("Designs accepted. Ending optimization")
+                    if end_early == True:
                         design_accepted = True
                         break
-                    elif continue_optimizing.lower() == "n":
-                        print(f"Designs not accepted. Continuing optimization until the prescribed {maximum_generation} generations are complete.")
-                        design_accepted = False
-                        break
                     else:
-                        print("Please enter Y or N to continue.")
-                        continue
+                        continue_optimizing = input("\nAccept best design and end optimization early? Y/N")
+                        if continue_optimizing.lower() == "y":
+                            print("Designs accepted. Ending optimization")
+                            design_accepted = True
+                            break
+                        elif continue_optimizing.lower() == "n":
+                            print(f"Designs not accepted. Continuing optimization until the prescribed {maximum_generation} generations are complete.")
+                            design_accepted = False
+                            break
+                        else:
+                            print("Please enter Y or N to continue.")
+                            continue
         
         if design_accepted:
             break

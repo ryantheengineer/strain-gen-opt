@@ -78,11 +78,12 @@ def get_constraint_geometry():
     df_Probes = get_point_geometry(root, "Probes")
     df_GuidePins = get_point_geometry(root, "GuidePins")
     df_PressureRods = get_point_geometry(root, "PressureRods")
+    df_BoardStops = get_point_geometry(root, "BottomPressureRods")
     df_Standoffs = get_point_geometry(root, "Standoffs")
     
     results = (root, inputfile, pBoards, pOutline, pShape, pComponentsTop,
                pComponentsBot, Pressure, I_Plate, Stripper, Probe, Countersink,
-               df_Probes, df_GuidePins, df_PressureRods, df_Standoffs)
+               df_Probes, df_GuidePins, df_PressureRods, df_BoardStops, df_Standoffs)
     return results
 
 
@@ -169,18 +170,28 @@ def get_point_geometry(root, identifier):
             for row in table.findall('.//row'):
                 rows.append(row.text.split('|'))
             
-            if len(column_names) != len(types) or len(column_names) != len(rows[0]):
-                raise ValueError(f"Mismatch between number of columns, types, or row elements for {identifier}")
-            
-            columns = []
-            for i in range(len(column_names)):
-                columns.append([])
-                for j in range(len(rows)):
-                    columns[i].append(interpret_type_description(types[i],rows[j][i]))
-                    
-            output_dict = {column_names[i]:columns[i] for i in range(len(column_names))}
-            df_output = pd.DataFrame(output_dict)
-             
+            if len(rows) != 0:
+                if len(column_names) != len(types) or len(column_names) != len(rows[0]):
+                    raise ValueError(f"Mismatch between number of columns, types, or row elements for {identifier}")
+                columns = []
+                for i in range(len(column_names)):
+                    columns.append([])
+                    for j in range(len(rows)):
+                        columns[i].append(interpret_type_description(types[i],rows[j][i]))
+                        
+                output_dict = {column_names[i]:columns[i] for i in range(len(column_names))}
+                df_output = pd.DataFrame(output_dict)
+            else:
+                if identifier == "BottomPressureRods" or identifier == "PressureRods":
+                    column_names = ['unimplemented1','unimplemented2','unimplemented3',
+                                    'unimplemented4','unimplemented5','unimplemented6',
+                                    'x','y','unimplemented7','unimplemented8',
+                                    'unimplemented9','unimplemented10','unimplemented11',
+                                    'type','unimplemented12','unimplemented13','z','color']
+                    df_output = pd.DataFrame(columns=column_names)
+                else:
+                    raise ValueError("An empty point dataframe was passed to constraints.get_point_geometry() that wasn't for board stops (bottom pressure rods) or top side pressure rods")
+
     return df_output
 
 
@@ -625,6 +636,217 @@ def create_chromosome(nprods, pBoards, pComponentsTop, df_Probes, pBoards_diff, 
 
     return chromosome
 
+def create_chromosome_v2(nprods_top, nprods_bot, top_constraints, bot_constraints, all_on=False, on_prob=0.5, rod_type="All"):
+    # Initialize random chromosome, where the first ncircles entries are
+    # the x coordinates, the next ncircles entries are y coordinates, then
+    # radii, on/off binary values, and then the side of the board that the
+    # pressure rod is on (1 for top, 2 for bottom)
+    
+    pBoards_multi = top_constraints[0]
+    top_probes = top_constraints[1]
+    topcomponents = top_constraints[2]
+    bot_probes = bot_constraints[1]
+    botcomponents = bot_constraints[2]
+    
+    xmin, ymin, xmax, ymax = pBoards_multi.bounds
+    rod_types = ['Press-Fit Tapered',
+                 'Press-Fit Flat',
+                 '3.325" Tapered',
+                 '3.325" Flat']
+    
+    
+    def place_pressure_rods(nprods, sidenum, pBoards_multi, side_probes, sidecomponents):
+        chromosome_x = []
+        chromosome_y = []
+        chromosome_rod_type = []
+        chromosome_on = []
+        chromosome_side = []
+        prods_chosen = []
+        tries = 10
+        
+        while len(chromosome_x) < nprods: # FIXME: 
+            valid = True
+            x = random.uniform(xmin,xmax)
+            y = random.uniform(ymin,ymax)
+            if rod_type not in rod_types:
+                rod_type_i = random.randint(0,3)
+            else:
+                rod_type_i = rod_types.index(rod_type)
+            if all_on:
+                on = 1
+            else:
+                # on_prob = 0.5   # Percentage chance of a pressure rod being on initially
+                on_chance = random.uniform(0,1)
+                if on_prob >= on_chance:
+                    on = 1
+                else:
+                    on = 0
+                # on = random.randint(0,1)
+            prod = PressureRod(x,y,rod_types[rod_type_i],on)
+            intersects_sidecomponents = False
+            intersects_sideprobes = False
+            intersects_botcomponents = False
+            intersects_sideprobes = False
+            centroids = []
+            perturbing = False
+            
+            # Make sure pressure rod is within the UUT and make sure it doesn't intersect any components, using the appropriate buffer sizes
+            if not prod.center.intersects(pBoards_multi):
+                continue
+            # if not prod.center.within(pBoards_multi):
+            #     continue
+            
+            ### TRYING MOVING AWAY FROM INTERSECTION VIOLATIONS TO SALVAGE DESIGN ###
+            # Gather status of currently placed prod
+            if prod.tip_component_buffer.intersects(sidecomponents):
+                intersects_sidecomponents = True
+                intersection_sidecomponents = prod.tip_component_buffer.intersection(sidecomponents)
+                
+            if prod.tip_from_top_probe_buffer.intersects(side_probes):
+                intersects_sideprobes = True
+                intersection_sideprobes = prod.tip_from_top_probe_buffer.intersection(side_probes)
+            
+            # Parse the status of intersections
+            if not intersects_sidecomponents and not intersects_sideprobes:
+                pass
+            elif intersects_sidecomponents and not intersects_sideprobes:
+                perturbing = True
+                if intersection_sidecomponents.geom_type == "Polygon":
+                    centroids.append(intersection_sidecomponents.centroid)
+                else:
+                    for poly in intersection_sidecomponents.geoms:
+                        centroids.append(poly.centroid)
+            elif not intersects_sidecomponents and intersects_sideprobes:
+                perturbing = True
+                if intersection_sideprobes.geom_type == "Polygon":
+                    centroids.append(intersection_sideprobes.centroid)
+                else:
+                    for poly in intersection_sideprobes.geoms:
+                        centroids.append(poly.centroid)                    
+            else:
+                perturbing = True
+                # both side components and side probes are intersected by the current prod
+                if intersection_sidecomponents.geom_type == "Polygon":
+                    centroids.append(intersection_sidecomponents.centroid)
+                else:
+                    for poly in intersection_sidecomponents.geoms:
+                        centroids.append(poly.centroid)
+                        
+                if intersection_sideprobes.geom_type == "Polygon":
+                    centroids.append(intersection_sideprobes.centroid)
+                else:
+                    for poly in intersection_sideprobes.geoms:
+                        centroids.append(poly.centroid)            
+            
+            if perturbing:                    
+                centroids_x = [centroid.x for centroid in centroids]
+                centroids_y = [centroid.y for centroid in centroids]
+                
+                avg_x = np.mean(centroids_x)
+                avg_y = np.mean(centroids_y)
+                
+                diff_x = prod.x - avg_x
+                diff_y = prod.y - avg_y
+                
+                mag_diff = np.sqrt(diff_x**2 + diff_y**2)
+                
+                unit_x = diff_x / mag_diff
+                unit_y = diff_y / mag_diff
+                
+                # print("")
+                # print("-"*60)
+                # print("PERTURBING PROD AWAY FROM INTERSECTION")
+                
+                for i in range(tries):
+                    valid = True
+                    prodxmin, prodymin, prodxmax, prodymax = prod.tip_component_buffer.bounds
+                    stepsize = (prodxmax - prodxmin)/tries
+                    new_x = prod.x + unit_x*stepsize
+                    new_y = prod.y + unit_y*stepsize
+                    
+                    prod.update_pressure_rod(new_x, new_y, prod.rod_type, prod.on)
+                    
+                    # # Check for intersections on top side
+                    # if sidenum == 1:
+                    #     component_intersection_area = prod.tip_component_buffer.intersection(topcomponents).area
+                    #     probe_intersection_area = prod.tip_from_top_probe_buffer.intersection(top_probes).area
+                    # elif sidenum == 2:
+                    #     component_intersection_area = prod.tip_component_buffer.intersection(botcomponents).area
+                    #     probe_intersection_area = prod.tip_from_top_probe_buffer.intersection(bot_probes).area
+                    # else:
+                    #     raise ValueError("sidenum must be equal to 1 or 2")
+                    
+                    # print(f"\n{topcomponent_intersection_area} intersection with top components")
+                    # print(f"{top_probe_intersection_area} intersection with top probes")
+                    
+                    if not prod.center.intersects(pBoards_multi):
+                        valid = False
+                        continue                
+                    if prod.tip_component_buffer.intersects(sidecomponents):
+                        valid = False
+                        continue
+                    if prod.tip_from_top_probe_buffer.intersects(side_probes):
+                        valid = False
+                        continue
+                    
+                    if valid == True:
+                        break
+                    
+            if not prod.center.intersects(pBoards_multi):
+                valid = False
+                continue
+                
+            
+            
+            # ## END NEW CODE ###
+            
+            # # ## ORIGINAL CODE ###
+            # if prod.tip_component_buffer.intersects(topcomponents):
+            #     continue
+            
+            # # Make sure the pressure rod isn't too close to any top probes
+            # if prod.tip_from_top_probe_buffer.intersects(top_probes):
+            #     continue
+                
+            # Make sure pressure rod doesn't conflict with any previously-placed pressure rods
+            if len(prods_chosen) > 0:
+                for prod_chosen in prods_chosen:
+                    if prod_chosen.top.intersects(prod.top_from_top_probe_buffer):
+                        valid = False
+                        break
+                    # dist = centroid_distance(prod.tip,prod_chosen.tip)
+                    # if dist < prod.ctc:
+                    #     valid = False
+                    #     break
+                if valid == False:
+                    continue
+            ### END ORIGINAL CODE ###
+            
+            if valid == True:
+                prods_chosen.append(prod)
+                chromosome_x.append(prod.x)
+                chromosome_y.append(prod.y)
+                chromosome_rod_type.append(rod_type_i)
+                chromosome_on.append(on)
+                
+        return chromosome_x, chromosome_y, chromosome_rod_type, chromosome_on
+    
+    chromosome_x_top, chromosome_y_top, chromosome_rod_type_top, chromosome_on_top = place_pressure_rods(nprods_top, 1, pBoards_multi, top_probes, topcomponents)
+    chromosome_x_bot, chromosome_y_bot, chromosome_rod_type_bot, chromosome_on_bot = place_pressure_rods(nprods_bot, 2, pBoards_multi, bot_probes, botcomponents)
+    
+    
+    chromosome = []
+    chromosome.extend(chromosome_x_top)
+    chromosome.extend(chromosome_x_bot)
+    chromosome.extend(chromosome_y_top)
+    chromosome.extend(chromosome_y_bot)
+    chromosome.extend(chromosome_rod_type_top)
+    chromosome.extend(chromosome_rod_type_bot)
+    chromosome.extend(chromosome_on_top)
+    chromosome.extend(chromosome_on_bot)
+
+    return chromosome
+
 # def validate_chromosome(chromosome, nprods, top_constraints):
 #     prods = interpret_chromosome_to_prods(chromosome, nprods)
 #     pBoards_multi = top_constraints[0]
@@ -655,6 +877,39 @@ def get_top_constraints(pBoards, pComponentsTop, df_Probes, pBoards_diff):
     
     top_constraints = (pBoards_multi, top_probes, topcomponents)
     return top_constraints
+
+def get_board_constraints_single_side(pBoards, pComponentsSide, sidenum, df_Probes, pBoards_diff):
+    '''
+    More general version of get_top'_constraints
+    '''
+    
+    pBoards_multi = MultiPolygon(pBoards_diff)
+    
+    # Verify sidenum is a valid integer
+    if sidenum not in [1,2]:
+        raise ValueError("Board side integer should be 1 or 2")
+    df_Probes_side = df_Probes[df_Probes["side"]==sidenum]  # 1 for top side, 2 for bottom side
+    df_Probes_side.reset_index(inplace=True)
+    side_probes = []
+    for i,row in df_Probes_side.iterrows():
+        side_probes.append(place_circle(row.x, row.y, row.diameter/2))
+        
+    side_probes = unary_union(side_probes)
+    if side_probes.geom_type != "MultiPolygon":
+        side_probes = MultiPolygon(side_probes)
+    
+    sidecomponents = []
+    for inner in pComponentsSide:
+        sidecomponents.append(inner)
+    
+    sidecomponents = unary_union(sidecomponents)
+    if sidecomponents.geom_type != "MultiPolygon":
+        sidecomponents = MultiPolygon(sidecomponents)
+    
+    side_constraints = (pBoards_multi, side_probes, sidecomponents)
+    return side_constraints
+
+
 
 def plot_prods_top_constraints(prods, top_constraints, title):
     # Quick plot to visually check designs as they are produced by crossover
@@ -795,15 +1050,14 @@ def initialize_population_simple(npop, nprods, pBoards, pComponentsTop, df_Probe
         print(f"Chromosome {i} of {npop} created")
     return initial_population
 
-def interpret_chromosome_to_prods(chromosome, nprods):
-    
-    def interpret_rod_type_int(rod_type_int):
-        rod_types = ['Press-Fit Tapered',
-                     'Press-Fit Flat',
-                     '3.325" Tapered',
-                     '3.325" Flat']
-        return rod_types[rod_type_int]
-    
+def initialize_population_simple_v2(npop, nprods_top, nprods_bot, top_constraints, bot_constraints, all_on, on_prob, rod_type):
+    initial_population = []
+    for i in range(npop):
+        initial_population.append(create_chromosome_v2(nprods_top, nprods_bot, top_constraints, bot_constraints, all_on, on_prob, rod_type))
+        print(f"Chromosome {i} of {npop} created")
+    return initial_population
+
+def interpret_chromosome_to_prods(chromosome, nprods):    
     prods = []
     for i in range(nprods):
         x = chromosome[i]
@@ -816,16 +1070,36 @@ def interpret_chromosome_to_prods(chromosome, nprods):
     
     return prods
 
-def interpret_prods_to_chromosome(prods):
+def interpret_chromosome_to_prods_v2(chromosome, nprods_top, nprods_bot):    
+    prods = []
+    for i in range(nprods_top + nprods_bot):
+        x = chromosome[i]
+        y = chromosome[i + nprods_top + nprods_bot]
+        rod_type_int = int(chromosome[i+2*(nprods_top + nprods_bot)])
+        rod_type = interpret_rod_type_int(rod_type_int)
+        on = chromosome[i+3*(nprods_top + nprods_bot)]
+        prod = PressureRod(x, y, rod_type, on)
+        prods.append(prod)
     
-    def interpret_rod_type(rod_type):
-        rod_types = ['Press-Fit Tapered',
-                     'Press-Fit Flat',
-                     '3.325" Tapered',
-                     '3.325" Flat']
-        
-        return rod_types.index(rod_type)
-        
+    return prods
+
+
+def interpret_rod_type_int(rod_type_int):
+    rod_types = ['Press-Fit Tapered',
+                 'Press-Fit Flat',
+                 '3.325" Tapered',
+                 '3.325" Flat']
+    return rod_types[rod_type_int]
+
+def interpret_rod_type(rod_type):
+    rod_types = ['Press-Fit Tapered',
+                 'Press-Fit Flat',
+                 '3.325" Tapered',
+                 '3.325" Flat']
+    
+    return rod_types.index(rod_type)
+
+def interpret_prods_to_chromosome(prods):
     chromosome_x = []
     chromosome_y = []
     chromosome_rod_type = []
@@ -843,6 +1117,46 @@ def interpret_prods_to_chromosome(prods):
     chromosome.extend(chromosome_on)
     
     return chromosome
+
+def interpret_prods_to_chromosome_v2(prods, nprods_top, nprods_bot):
+    chromosome_x_top = []
+    chromosome_x_bot = []
+    chromosome_y_top = []
+    chromosome_y_bot = []
+    chromosome_rod_type_top = []
+    chromosome_rod_type_bot = []
+    chromosome_on_top = []
+    chromosome_on_bot = []
+    for i,prod in enumerate(prods):
+        if i < nprods_top:
+            chromosome_x_top.append(prod.x)
+            chromosome_y_top.append(prod.y)
+            chromosome_rod_type_top.append(interpret_rod_type(prod.rod_type))
+            chromosome_on_top.append(prod.on)
+        else:
+            chromosome_x_bot.append(prod.x)
+            chromosome_y_bot.append(prod.y)
+            chromosome_rod_type_bot.append(interpret_rod_type(prod.rod_type))
+            chromosome_on_bot.append(prod.on)
+            
+            
+    # chromosome = []
+    # chromosome.extend(chromosome_x)
+    # chromosome.extend(chromosome_y)
+    # chromosome.extend(chromosome_rod_type)
+    # chromosome.extend(chromosome_on)
+    
+    chromosome = []
+    chromosome.extend(chromosome_x_top)
+    chromosome.extend(chromosome_x_bot)
+    chromosome.extend(chromosome_y_top)
+    chromosome.extend(chromosome_y_bot)
+    chromosome.extend(chromosome_rod_type_top)
+    chromosome.extend(chromosome_rod_type_bot)
+    chromosome.extend(chromosome_on_top)
+    chromosome.extend(chromosome_on_bot)
+    
+    return chromosome
     
 
 def prods_to_valid_circles(prods):
@@ -851,7 +1165,7 @@ def prods_to_valid_circles(prods):
 
 
 # %% FEA functions
-def runFEA_valid_circles(valid_circles, df_PressureRods, root, inputfile, gen, iteration):
+def runFEA_valid_circles(valid_circles, df_PressureRods, df_BoardStops, root, inputfile, gen, iteration):
     # Ensure correct type is used for integer columns
     df_PressureRods['unimplemented1'] = df_PressureRods['unimplemented1'].astype(int)
     df_PressureRods['unimplemented2'] = df_PressureRods['unimplemented2'].astype(int)
@@ -869,61 +1183,91 @@ def runFEA_valid_circles(valid_circles, df_PressureRods, root, inputfile, gen, i
     df_PressureRods['unimplemented12'] = df_PressureRods['unimplemented12'].apply(str.lower)
     df_PressureRods['unimplemented13'] = df_PressureRods['unimplemented13'].astype(int)
     
-    df = df_PressureRods.loc[0,:]
-    basic_vals = {}
-    for col in df.index:
-        basic_vals[col] = df[col]
-    # new_vals = [[] for col in df.index]
+    df_BoardStops['unimplemented1'] = df_BoardStops['unimplemented1'].astype(int)
+    df_BoardStops['unimplemented2'] = df_BoardStops['unimplemented2'].astype(int)
+    df_BoardStops['unimplemented3'] = df_BoardStops['unimplemented3'].astype(int)
+    df_BoardStops['unimplemented4'] = df_BoardStops['unimplemented4'].astype(int)
+    df_BoardStops['unimplemented5'] = df_BoardStops['unimplemented5'].astype(str)
+    df_BoardStops['unimplemented5'] = df_BoardStops['unimplemented5'].apply(str.lower)
+    df_BoardStops['unimplemented6'] = df_BoardStops['unimplemented6'].astype(int)
+    df_BoardStops['unimplemented7'] = df_BoardStops['unimplemented7'].astype(int)
+    df_BoardStops['unimplemented8'] = df_BoardStops['unimplemented8'].astype(int)
+    df_BoardStops['unimplemented10'] = df_BoardStops['unimplemented10'].astype(int)
+    df_BoardStops['unimplemented11'] = df_BoardStops['unimplemented11'].astype(int)
+    df_BoardStops['type'] = df_BoardStops['type'].astype(str)
+    df_BoardStops['unimplemented12'] = df_BoardStops['unimplemented12'].astype(str)
+    df_BoardStops['unimplemented12'] = df_BoardStops['unimplemented12'].apply(str.lower)
+    df_BoardStops['unimplemented13'] = df_BoardStops['unimplemented13'].astype(int)
     
-    xnew = []
-    ynew = []
-    for valid_circle in valid_circles:
-        xnew.append(valid_circle.centroid.x)
-        ynew.append(valid_circle.centroid.y)
+    df_list = [df_PressureRods, df_BoardStops]
     
-    newdata = {}
-    for col in df.index:
-        if col == "x":
-            newdata[col] = xnew
-        elif col == "y":
-            newdata[col] = ynew
-        else:
-            newdata[col] = [basic_vals[col] for valid_circle in valid_circles]
-            
-    df_PressureRods_update = pd.DataFrame(newdata)
-    
-    # Get the rows of df_PressureRods_update as a list of strings
-    vals = df_PressureRods_update.to_string(header=False,
-                  index=False,
-                  index_names=False).split('\n')
-    for j,row in enumerate(vals):
-        splitrow = row.split()
-        newrow = []
-        for i,ele in enumerate(splitrow):
-            if i==13:
-                newrow.append(' '.join(splitrow[13:15]))
-            elif i==14:
-                continue
-            elif i==18:
-                newrow.append(''.join(splitrow[18:]))
-            elif i==19:
-                continue
-            elif i==20:
-                continue
+    for instance,df in enumerate(df_list):
+        if len(df) == 0:
+            if instance==0:
+                print("No top side pressure rods found in runFEA_valid_circles")
             else:
-                newrow.append(ele)
-        newrow = '|'.join(newrow)
-        vals[j] = newrow
-    # vals = ['|'.join(ele.split()) for ele in x
-    
-    # Delete the XML rows that need to be replaced
-    rows = root.find('.//table[@identifier="PressureRods"].//rows')
-    del rows[:]
-    
-    rowlist = [ET.SubElement(rows,'row') for val in vals]
-
-    for i,val in enumerate(vals):
-        rowlist[i].text = val
+                print("No bottom side pressure rods (board stops) found in runFEA_valid_circles")
+            continue
+        else:
+            
+            df_temp = df.loc[0,:]
+            basic_vals = {}
+            for col in df_temp.index:
+                basic_vals[col] = df_temp[col]
+            # new_vals = [[] for col in df.index]
+            
+            xnew = []
+            ynew = []
+            for valid_circle in valid_circles:
+                xnew.append(valid_circle.centroid.x)
+                ynew.append(valid_circle.centroid.y)
+            
+            newdata = {}
+            for col in df_temp.index:
+                if col == "x":
+                    newdata[col] = xnew
+                elif col == "y":
+                    newdata[col] = ynew
+                else:
+                    newdata[col] = [basic_vals[col] for valid_circle in valid_circles]
+                    
+            df_update = pd.DataFrame(newdata)
+            
+            # Get the rows of df_PressureRods_update as a list of strings
+            vals = df_update.to_string(header=False,
+                          index=False,
+                          index_names=False).split('\n')
+            for j,row in enumerate(vals):
+                splitrow = row.split()
+                newrow = []
+                for i,ele in enumerate(splitrow):
+                    if i==13:
+                        newrow.append(' '.join(splitrow[13:15]))
+                    elif i==14:
+                        continue
+                    elif i==18:
+                        newrow.append(''.join(splitrow[18:]))
+                    elif i==19:
+                        continue
+                    elif i==20:
+                        continue
+                    else:
+                        newrow.append(ele)
+                newrow = '|'.join(newrow)
+                vals[j] = newrow
+            # vals = ['|'.join(ele.split()) for ele in x
+            
+            # Delete the XML rows that need to be replaced
+            if instance == 0:
+                rows = root.find('.//table[@identifier="PressureRods"].//rows')
+            else:
+                rows = root.find('.//table[@identifier="BottomPressureRods"].//rows')                
+            del rows[:]
+            
+            rowlist = [ET.SubElement(rows,'row') for val in vals]
+        
+            for i,val in enumerate(vals):
+                rowlist[i].text = val
     
     # Set the salesOrder field (used in naming the output folder) to include
     # generation and iteration numbers
@@ -1198,7 +1542,8 @@ if __name__ == "__main__":
     df_Probes = results[12]
     df_GuidePins = results[13]
     df_PressureRods = results[14]
-    df_Standoffs = results[15]
+    df_BoardStops = results[15]
+    df_Standoffs = results[16]
     
     # Estimate a number of pressure rods for the top side that would make sense
     print("--- Estimating possible pressure rods ---")
