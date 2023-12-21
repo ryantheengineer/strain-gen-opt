@@ -115,11 +115,11 @@ def crossover_prods(pop, crossover_rate, nprods_top, nprods_bot, top_constraints
         # child_chromosome = constraints.interpret_prods_to_chromosome(child_prods)
         offspring[i, :] = child_chromosome
         
-        # Plot the parent and child designs for examination
-        constraints.plot_prods_top_constraints(parent1_prods, top_constraints, f"Crossover - Offspring {i}: Parent 1")
-        constraints.plot_prods_top_constraints(parent2_prods, top_constraints, f"Crossover - Offspring {i}: Parent 2")
-        constraints.plot_prods_top_constraints(child_prods, top_constraints, f"Crossover - Offspring {i}: Child")
-        plt.show()
+        # # Plot the parent and child designs for examination
+        # constraints.plot_prods_top_constraints(parent1_prods, top_constraints, f"Crossover - Offspring {i}: Parent 1")
+        # constraints.plot_prods_top_constraints(parent2_prods, top_constraints, f"Crossover - Offspring {i}: Parent 2")
+        # constraints.plot_prods_top_constraints(child_prods, top_constraints, f"Crossover - Offspring {i}: Child")
+        # plt.show()
         
     return offspring
 
@@ -694,7 +694,7 @@ def local_search(pop, n_searched, localsearch_rate, on_prob, perturbrate, maxmag
     return offspring    # arr(loc_search_size x n_var)
 
 # Calculate fitness (obj function) values for each chromosome/solution
-def evaluation(pop, nobjs, gen, nprods, inputfile, constraint_geom):
+def evaluation(pop, nobjs, gen, nprods_top, nprods_bot, inputfile, constraint_geom):
     """
     Run FEA on the current generation and retrieve the results.
 
@@ -754,7 +754,8 @@ def evaluation(pop, nobjs, gen, nprods, inputfile, constraint_geom):
     prods = []
     valid_circles = []
     for i, chromosome in enumerate(pop):
-        prods.append(constraints.interpret_chromosome_to_prods(chromosome, nprods))
+        prods.append(constraints.interpret_chromosome_to_prods_v2(chromosome, nprods_top, nprods_bot))
+        # prods.append(constraints.interpret_chromosome_to_prods(chromosome, nprods))
         valid_circles.append(constraints.prods_to_valid_circles(prods[i]))
         
     # Generate the XML files sequentially
@@ -1077,11 +1078,11 @@ def main_optimization():
     
     # Parameters
     print("Setting genetic algorithm parameters")
-    pop_size = 30              # initial number of chromosomes
-    rate_crossover = 10         # number of chromosomes that we apply crossover to
-    rate_mutation = 10         # number of chromosomes that we apply mutation to
+    pop_size = 8              # initial number of chromosomes
+    rate_crossover = 2         # number of chromosomes that we apply crossover to
+    rate_mutation = 2         # number of chromosomes that we apply mutation to
     chance_mutation = 0.2       # normalized percent chance that an individual pressure rod will be mutated
-    n_searched = 15              # number of chromosomes that we apply local_search to
+    n_searched = 2              # number of chromosomes that we apply local_search to
     chance_localsearch = 0.2
     on_prob_initial = 0.5   # Initial percentage chance that a pressure rod will be on (only in the initial population)
     on_prob = 0.8           # Likelihood an "off" pressure rod will be switched on
@@ -1096,7 +1097,7 @@ def main_optimization():
     
     nprods = 64
     nprods_top = 64
-    nprods_bot = 0
+    nprods_bot = 4
     print(f"nprods_small = {nprods_small}")
     print(f"nprods_large = {nprods_large}")
     nprods_top_input = input(f"Current nprods_top: {nprods_top}\n If this quantity is adequate press enter. Otherwise choose an integer value and press enter.\n")
@@ -1143,7 +1144,8 @@ def main_optimization():
         pop = np.append(pop, offspring_from_local_search, axis=0)
         
         print("Evaluating fitnesses...")
-        fitness_values = evaluation(pop, nobjs, i, nprods, inputfile, constraint_geom)
+        fitness_values = evaluation(pop, nobjs, i, nprods_top, nprods_bot, inputfile, constraint_geom)
+        # fitness_values = evaluation(pop, nobjs, i, nprods, inputfile, constraint_geom)
         fitness_values_temp = copy.deepcopy(fitness_values)
         genvals = i*np.ones((fitness_values_temp.shape[0],1))
         fitness_values_temp = np.append(fitness_values_temp, genvals, axis=1) # Add the generation number as a column for later referencing
@@ -1243,7 +1245,7 @@ def main_optimization():
     
     
     # Pareto front visualization
-    fitness_values = evaluation(pop, nobjs, i, nprods, inputfile, constraint_geom)
+    fitness_values = evaluation(pop, nobjs, i, nprods_top, nprods_bot, inputfile, constraint_geom)
     index = np.arange(pop.shape[0]).astype(int)
     pareto_front_index = pareto_front_finding(fitness_values, index)
     pop = pop[pareto_front_index, :]
