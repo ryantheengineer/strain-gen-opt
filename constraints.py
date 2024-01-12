@@ -1206,7 +1206,8 @@ def runFEA_valid_circles(valid_circles, df_PressureRods, df_BoardStops, root, in
             if instance==0:
                 print("No top side pressure rods found in runFEA_valid_circles")
             else:
-                print("No bottom side pressure rods (board stops) found in runFEA_valid_circles")
+                pass
+                # print("No bottom side pressure rods (board stops) found in runFEA_valid_circles")
             continue
         else:
             

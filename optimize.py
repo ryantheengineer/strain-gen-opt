@@ -20,6 +20,7 @@ from datetime import datetime
 from shapely.geometry import Point
 from shapely.ops import nearest_points
 import plotly.express as px
+import itertools
 
 # MINIMIZATION
 
@@ -50,6 +51,7 @@ def crossover_prods(pop, crossover_rate, nprods_top, nprods_bot, top_constraints
     print(f"Performing crossover to create {crossover_rate} child designs")
     offspring = np.zeros((crossover_rate, pop.shape[1]))
     for i in range(crossover_rate):
+        # print(f"Creating child {i} from crossover")
         # Crossover with complete pressure rods.
         complete = False
         while complete is False:
@@ -76,34 +78,95 @@ def crossover_prods(pop, crossover_rate, nprods_top, nprods_bot, top_constraints
             
             crossover_point = np.random.randint(1, nprods_top+nprods_bot)
             
+            ##### UPDATED PRE-CHECK METHOD FOR PROD CROSSOVER #####
+            flag = True
             for j in range(0, crossover_point):
-                # Get gene at position j from parent 2
-                child_prods[j] = copy.deepcopy(parent2_prods[j])
+                # Compare pressure rod j from parent 2 to all pressure rods in
+                # parent 1 except pressure rod j from parent 1. If it is too
+                # close to any parent 1 pressure rods, do not replace it. This
+                # method assumes all parent pressure rods are adequately spaced
+                parent1_compare = copy.deepcopy(parent1_prods)
+                parent1_compare.pop(j)
+                parent2_compare = copy.deepcopy(parent2_prods)
+                parent2_prod = copy.deepcopy(parent2_compare[j])
                 
-                # Check if the current potentially crossed gene violates any
-                # other genes, and if so, replace that gene instead of gene j
-                n_violated = 0
-                idx_violated = []
-                for k,prod in enumerate(child_prods):
-                    if k == j:
-                        continue
-                    # Don't compare distances for pressure rods that are top side versus bottom side
-                    if j < nprods_top and k >= nprods_top:
-                        continue
-                    if j >= nprods_top and k < nprods_top:
-                        continue
-                    dist = constraints.centroid_distance(child_prods[j].tip, prod.tip)
-                    if dist < prod.ctc:
-                        n_violated += 1
-                        idx_violated.append(k)
-                if n_violated == 0:
+                for prod in parent1_compare:
+                    dist = constraints.centroid_distance(prod.tip, parent2_prod.tip)
+                    if dist < prod.ctc or dist < parent2_prod.ctc:
+                        flag = False
+                        # print(f"Failed attempt at crossover for prod {j} - prods too close together")
+                        break
+                if flag is False:
                     continue
-                elif n_violated == 1:
-                    child_prods[j] = parent1_prods[j]
-                    child_prods[idx_violated[0]] = parent2_prods[j]
                 else:
-                    continue
+                    child_prods[j] = copy.deepcopy(parent2_prod)
+            
+            
+            # ##### SIMPLE BRUTE FORCE METHOD FOR PROD CROSSOVER #####
+            # for j in range(len(child_prods)):
+            #     if j <= crossover_point:
+            #         child_prods[j] = copy.deepcopy(parent1_prods[j])
+            #     else:
+            #         child_prods[j] = copy.deepcopy(parent2_prods[j])
                     
+            # # Compare all combinations of pressure rods to see if there are 
+            # # any distances less than the .ctc parameter
+            # combos = []
+            # for r in range(len(child_prods)):
+            #     combos.extend(itertools.combinations(child_prods,2))
+            
+            # for combo in combos:
+            #     dist = constraints.centroid_distance(combo[0].tip, combo[1].tip)
+            #     if dist < combo[0].ctc or dist < combo[1].ctc:
+            #         complete = False
+            #         break
+            # if complete is False:
+            #     print(f"Failed attempt at crossover for child {i}")
+            #     continue
+            
+            # ##### ORIGINAL CROSSOVER METHOD FOR PRODS #####
+            # for j in range(0, crossover_point):
+            #     # Get gene at position j from parent 2
+            #     child_prods[j] = copy.deepcopy(parent2_prods[j])
+                
+            #     # Check if the current potentially crossed gene violates any
+            #     # other genes, and if so, replace that gene instead of gene j
+            #     n_violated = 0
+            #     idx_violated = []
+            #     for k,prod in enumerate(child_prods):
+            #         if k == j:
+            #             continue
+            #         # Don't compare distances for pressure rods that are top side versus bottom side
+            #         if j < nprods_top and k >= nprods_top:
+            #             continue
+            #         if j >= nprods_top and k < nprods_top:
+            #             continue
+            #         dist = constraints.centroid_distance(child_prods[j].tip, prod.tip)
+            #         if dist < prod.ctc:
+            #             n_violated += 1
+            #             idx_violated.append(k)
+            #     if n_violated == 0:
+            #         continue
+            #     elif n_violated == 1:
+            #         child_prods[j] = parent1_prods[j]
+            #         child_prods[idx_violated[0]] = parent2_prods[j]
+            #     else:
+            #         continue
+            
+            # ########### Double check that all pressure rods are adequately spaced
+            # combos = []
+            # for r in range(len(child_prods)):
+            #     combos.extend(itertools.combinations(child_prods,2))
+            
+            # for combo in combos:
+            #     dist = constraints.centroid_distance(combo[0].tip, combo[1].tip)
+            #     if dist < combo[0].ctc or dist < combo[1].ctc:
+            #         complete = False
+            #         break
+            # if complete is False:
+            #     print(f"Failed attempt at crossover for child {i}")
+            #     continue
+            
             # Validate that at least one gene has been changed
             for j in range(len(child_prods)):
                 if child_prods[j] != parent1_prods[j]:
@@ -1078,11 +1141,11 @@ def main_optimization():
     
     # Parameters
     print("Setting genetic algorithm parameters")
-    pop_size = 8              # initial number of chromosomes
-    rate_crossover = 2         # number of chromosomes that we apply crossover to
-    rate_mutation = 2         # number of chromosomes that we apply mutation to
+    pop_size = 30              # initial number of chromosomes
+    rate_crossover = 9         # number of chromosomes that we apply crossover to
+    rate_mutation = 9         # number of chromosomes that we apply mutation to
     chance_mutation = 0.2       # normalized percent chance that an individual pressure rod will be mutated
-    n_searched = 2              # number of chromosomes that we apply local_search to
+    n_searched = 9              # number of chromosomes that we apply local_search to
     chance_localsearch = 0.2
     on_prob_initial = 0.5   # Initial percentage chance that a pressure rod will be on (only in the initial population)
     on_prob = 0.8           # Likelihood an "off" pressure rod will be switched on
@@ -1093,11 +1156,11 @@ def main_optimization():
     nobjs = 5
     
     end_early = True
-    
+    # FIXME: Add ability to pickle the variables needed to continue an optimization later
     
     nprods = 64
     nprods_top = 64
-    nprods_bot = 4
+    nprods_bot = 0
     print(f"nprods_small = {nprods_small}")
     print(f"nprods_large = {nprods_large}")
     nprods_top_input = input(f"Current nprods_top: {nprods_top}\n If this quantity is adequate press enter. Otherwise choose an integer value and press enter.\n")
