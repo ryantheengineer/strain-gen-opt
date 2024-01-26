@@ -85,7 +85,7 @@ def find_latest_folder_with_substring(base_dir, substring):
 
 def resultsToDataframe(inputfile):
     directory = pathlib.Path(inputfile)
-    directory = str(directory.parent) + "\Output"
+    directory = str(directory.parent) + "/Output"
     path, filename = os.path.split(inputfile)
     filename = os.path.splitext(filename)[0]
     
@@ -118,7 +118,7 @@ if __name__ == "__main__":
     # FEApath = "C:/Users/Ryan Larson/github/strain-gen-opt/FEA/FEA.exe"
     
     # # Choose FEA path here
-    # initialdirFEA = "C:/Users/Ryan Larson/github/strain-gen-opt/FEA"
+    # initialdirFEA = "E:/github/strain-gen-opt/FEA"
     # FEApath = chooseFEApath(initialdirFEA)
     
     # Load previously chosen FEA path here
@@ -136,8 +136,6 @@ if __name__ == "__main__":
             filetypes=filetypes
             )
     root.destroy()
-    
-    # inputfile = "C:/Users/Ryan Larson/github/strain-gen-opt/FEA/Examples/Example 1/FEA.xml"
     
     runFEA(FEApath, inputfile)
     

@@ -811,8 +811,8 @@ def evaluation(pop, nobjs, gen, nprods_top, nprods_bot, inputfile, constraint_ge
     df_BoardStops = constraint_geom[15]
     df_Standoffs = constraint_geom[16]
     
-    ncpus = 2
-    # ncpus = multiprocessing.cpu_count()
+    # ncpus = 2
+    ncpus = multiprocessing.cpu_count()
     
     prods = []
     valid_circles = []

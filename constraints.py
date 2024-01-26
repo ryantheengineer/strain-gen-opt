@@ -13,6 +13,7 @@ FROM THE XML DESIGN INPUT.
 
 from shapely.geometry import Point, Polygon, MultiPolygon
 from shapely.affinity import rotate, translate
+from shapely.strtree import STRtree
 # from shapely import buffer
 from shapely.ops import unary_union
 # import xmltodict
@@ -30,6 +31,7 @@ import os
 import time
 import multiprocessing
 import queue
+import copy
 
 # %% XML Functions
 # Get the root of the XML tree that will be used for all other input parsing
@@ -104,7 +106,7 @@ def get_fixture_geometry(root, identifier):
         polys.append(Polygon(vertices))
         
         
-    if fixture:
+    if fixture is not None:
         numRegions = int(fixture.find('.//numRegions').text)
         numHoles = int(fixture.find('.//numHoles').text)
         if numRegions:
@@ -366,13 +368,21 @@ def grid_nprods(pBoards, pComponentsTop):
     # Add buffers around components and edge of boards
     # buffer_dist = 0.025
     pBoards_diff = []
-    for board in pBoards:
+    if type(pBoards) is not list:
+        print(f"pBoards is not a list. It is a {type(pBoards)}")
+        if pBoards.geom_type == "MultiPolygon":
+            pBoards = list(pBoards.geoms)
+    for board in pBoards:           # NOTE: pBoards is expected to be a list of Polygons (now can be MultiPolygon)
         UUT_poly_ext = Polygon(board.exterior.coords)
         # UUT_poly_dilated_ext = buffer(UUT_poly_ext,-buffer_dist)
         pBoards_diff.append(UUT_poly_ext)
     
     topcomponents = []
-    for inner in pComponentsTop:
+    if type(pComponentsTop) is not list:
+        print(f"pComponentsTop is not a list. It is a {type(pComponentsTop)}")
+        if pComponentsTop.geom_type == "MultiPolygon":
+            pComponentsTop = list(pComponentsTop.geoms)
+    for inner in pComponentsTop:            # NOTE: pComponentsTop is expected to be a list of Polygons
         topcomponents.append(inner)
     
     topcomponents = unary_union(topcomponents)
@@ -384,6 +394,17 @@ def grid_nprods(pBoards, pComponentsTop):
         for inner in topcomponents:
             if inner.intersects(board):
                 pBoards_diff[i] = pBoards_diff[i].difference(inner)
+                
+    # If subtracting component boundaries resulted in the creation of any
+    # MultiPolygons, turn these into Polygons and append them to pBoards_diff
+    pBoards_diff_temp = []
+    for i,board in enumerate(pBoards_diff):
+        if board.geom_type == "MultiPolygon":
+            polys = list(board.geoms)
+            pBoards_diff_temp.extend(polys)
+        else:
+            pBoards_diff_temp.extend([board])
+    pBoards_diff = copy.deepcopy(pBoards_diff_temp)
     
     # Place circles on grid within UUT
     valid_prods_small = []
@@ -654,6 +675,29 @@ def create_chromosome_v2(nprods_top, nprods_bot, top_constraints, bot_constraint
                  '3.325" Tapered',
                  '3.325" Flat']
     
+    def build_grid(min_x, min_y, max_x, max_y, grid_size):
+        grid_cells = []
+        x = min_x
+        while x < max_x:
+            y = min_y
+            while y < max_y:
+                grid_cells.append({
+                    'min_x': x,
+                    'min_y': y,
+                    'max_x': x + grid_size,
+                    'max_y': y + grid_size
+                })
+                y += grid_size
+            x += grid_size
+        return grid_cells
+    
+    def get_grid_cell_poly(grid_cell):
+        # Need a way to check if the chosen grid cell is a good candidate for pressure rod placement
+        grid_cell_poly = Polygon([[grid_cell['min_x'], grid_cell['min_y']],
+                                  [grid_cell['min_x'], grid_cell['max_y']],
+                                  [grid_cell['max_x'], grid_cell['max_y']],
+                                  [grid_cell['max_x'], grid_cell['min_y']]])
+        return grid_cell_poly
     
     def place_pressure_rods(nprods, sidenum, pBoards_multi, side_probes, sidecomponents):
         chromosome_x = []
@@ -663,11 +707,110 @@ def create_chromosome_v2(nprods_top, nprods_bot, top_constraints, bot_constraint
         chromosome_side = []
         prods_chosen = []
         tries = 10
+        grid_tries = 10
+        
+        # Add grid searching method
+        grid_size = 1.0
+        grid_cells = build_grid(xmin, ymin, xmax, ymax, grid_size)
+        
+        grid_cell_polys = [get_grid_cell_poly(grid_cell) for grid_cell in grid_cells]
+        
+        search_by_subpoly_flag = False
+        use_subpolys = []
+        min_area = 0.1
+        max_pBoard_poly = max(list(pBoards_multi.geoms), key=lambda part: part.area)
+        if max_pBoard_poly.area < grid_size **2:
+            search_by_subpoly_flag = True
+            for poly in list(pBoards_multi.geoms):
+                if poly.area >= min_area:
+                    use_subpolys.append(poly)
+        
+        
+        if not search_by_subpoly_flag:
+            grid_cell_intersections_max_area = []
+            grid_cell_intersections_total_area = []
+            
+            for i, grid_cell_poly in enumerate(grid_cell_polys):
+                overlap_area = grid_cell_poly.intersection(pBoards_multi).area
+                grid_cell_intersections_total_area.append(overlap_area)
+                
+                max_area_poly = max(list(pBoards_multi.geoms), key=lambda poly: poly.area, default=None)
+                max_area = max_area_poly.area if max_area_poly else 0.0
+                grid_cell_intersections_max_area.append(max_area)
+                
+            # Raise error if no grid cells have a max contiguous area of > 0.0081 or a total available area of greater than 0.02
+            if any(element > 0.0081 for element in grid_cell_intersections_max_area) or any(element >= 0.02 for element in grid_cell_intersections_total_area):
+                pass
+            else:
+                raise Exception("No grid cell found with acceptable available area")
         
         while len(chromosome_x) < nprods: # FIXME: 
             valid = True
-            x = random.uniform(xmin,xmax)
-            y = random.uniform(ymin,ymax)
+            # x = random.uniform(xmin,xmax)
+            # y = random.uniform(ymin,ymax)
+            
+            if not search_by_subpoly_flag:
+                # Search a smaller area of the board
+                i = random.choice(range(len(grid_cells)))
+                # If the total available placement area is not more than 2 times
+                # the diameter of the smallest prod, and the max individual area
+                # is not more than a square with sides equal to the diameter of the
+                # smallest prod, then don't look here.
+                if grid_cell_intersections_total_area[i] >= 0.02 and grid_cell_intersections_max_area[i] > 0.0081:
+                    pass
+                else:
+                    continue
+                
+                grid_cell = grid_cells[i]
+                
+                grid_try_count = 0
+                while grid_try_count < grid_tries:
+                    x = random.uniform(grid_cell['min_x'], grid_cell['max_x'])
+                    y = random.uniform(grid_cell['min_y'], grid_cell['max_y'])
+                    pt = Point(x,y)
+                    
+                    # ##### Plot for visual verification (can comment this out during final runs ##### 
+                    # print(f"search_by_subpoly_flag = {search_by_subpoly_flag}")
+                    fig, ax = plt.subplots(dpi=300, figsize=(10,8))
+                    ax.set_aspect('equal')
+                    plot_poly_list_w_holes(grid_cell_polys, fig, ax, 'k', '-', 'grid_cell_polys')
+                    plot_multipolygon_w_holes(pBoards_multi, fig, ax, 'm', '-','pBoards_multi')
+                    ax.scatter(x, y, color='red', s=50)
+                    plt.show()
+                    
+                    # for i, poly in enumerate(grid_cell_polys):
+                    #     print(f"Grid cell {i} available area:\t{poly.intersection(pBoards_multi).area}")
+                        
+                    # print(f"\nTotal available area: {pBoards_multi.area}")
+                    
+                    # #################################################################################
+                    
+                    if not pt.intersects(pBoards_multi):
+                        grid_try_count += 1
+                        continue
+                    else:
+                        break
+            
+            if not search_by_subpoly_flag:    
+                if grid_try_count > grid_tries:     # If the grid cell didn't turn up a possible placement, move on to another grid cell
+                    continue
+                
+            if search_by_subpoly_flag:
+                i = random.choice(range(len(use_subpolys)))
+                xmin_sub, ymin_sub, xmax_sub, ymax_sub = use_subpolys[i].bounds
+                while True:
+                    x = random.uniform(xmin_sub,xmax_sub)
+                    y = random.uniform(ymin_sub,ymax_sub)
+                    pt = Point(x,y)
+                    if pt.intersects(use_subpolys[i]):
+                        # Plot to see what the behavior is for placement
+                        fig, ax = plt.subplots(dpi=300, figsize=(10,8))
+                        ax.set_aspect('equal')
+                        plot_multipolygon_w_holes(pBoards_multi, fig, ax, 'm', '-','pBoards_multi')
+                        ax.scatter(x, y, color='red', s=50)
+                        plt.show()
+                        break
+            
             if rod_type not in rod_types:
                 rod_type_i = random.randint(0,3)
             else:
@@ -891,16 +1034,18 @@ def get_board_constraints_single_side(pBoards, pComponentsSide, sidenum, df_Prob
     df_Probes_side = df_Probes[df_Probes["side"]==sidenum]  # 1 for top side, 2 for bottom side
     df_Probes_side.reset_index(inplace=True)
     side_probes = []
-    for i,row in df_Probes_side.iterrows():
-        side_probes.append(place_circle(row.x, row.y, row.diameter/2))
+    if not df_Probes_side.empty:
+        for i,row in df_Probes_side.iterrows():
+            side_probes.append(place_circle(row.x, row.y, row.diameter/2))
         
     side_probes = unary_union(side_probes)
     if side_probes.geom_type != "MultiPolygon":
         side_probes = MultiPolygon(side_probes)
     
     sidecomponents = []
-    for inner in pComponentsSide:
-        sidecomponents.append(inner)
+    if pComponentsSide:
+        for inner in pComponentsSide:
+            sidecomponents.append(inner)
     
     sidecomponents = unary_union(sidecomponents)
     if sidecomponents.geom_type != "MultiPolygon":
