@@ -709,6 +709,8 @@ def create_chromosome_v2(nprods_top, nprods_bot, top_constraints, bot_constraint
         tries = 10
         grid_tries = 10
         
+        plotting = False
+        
         # Add grid searching method
         grid_size = 1.0
         grid_cells = build_grid(xmin, ymin, xmax, ymax, grid_size)
@@ -771,12 +773,13 @@ def create_chromosome_v2(nprods_top, nprods_bot, top_constraints, bot_constraint
                     
                     # ##### Plot for visual verification (can comment this out during final runs ##### 
                     # print(f"search_by_subpoly_flag = {search_by_subpoly_flag}")
-                    fig, ax = plt.subplots(dpi=300, figsize=(10,8))
-                    ax.set_aspect('equal')
-                    plot_poly_list_w_holes(grid_cell_polys, fig, ax, 'k', '-', 'grid_cell_polys')
-                    plot_multipolygon_w_holes(pBoards_multi, fig, ax, 'm', '-','pBoards_multi')
-                    ax.scatter(x, y, color='red', s=50)
-                    plt.show()
+                    if plotting:
+                        fig, ax = plt.subplots(dpi=300, figsize=(10,8))
+                        ax.set_aspect('equal')
+                        plot_poly_list_w_holes(grid_cell_polys, fig, ax, 'k', '-', 'grid_cell_polys')
+                        plot_multipolygon_w_holes(pBoards_multi, fig, ax, 'm', '-','pBoards_multi')
+                        ax.scatter(x, y, color='red', s=50)
+                        plt.show()
                     
                     # for i, poly in enumerate(grid_cell_polys):
                     #     print(f"Grid cell {i} available area:\t{poly.intersection(pBoards_multi).area}")
@@ -803,12 +806,13 @@ def create_chromosome_v2(nprods_top, nprods_bot, top_constraints, bot_constraint
                     y = random.uniform(ymin_sub,ymax_sub)
                     pt = Point(x,y)
                     if pt.intersects(use_subpolys[i]):
-                        # Plot to see what the behavior is for placement
-                        fig, ax = plt.subplots(dpi=300, figsize=(10,8))
-                        ax.set_aspect('equal')
-                        plot_multipolygon_w_holes(pBoards_multi, fig, ax, 'm', '-','pBoards_multi')
-                        ax.scatter(x, y, color='red', s=50)
-                        plt.show()
+                        if plotting:
+                            # Plot to see what the behavior is for placement
+                            fig, ax = plt.subplots(dpi=300, figsize=(10,8))
+                            ax.set_aspect('equal')
+                            plot_multipolygon_w_holes(pBoards_multi, fig, ax, 'm', '-','pBoards_multi')
+                            ax.scatter(x, y, color='red', s=50)
+                            plt.show()
                         break
             
             if rod_type not in rod_types:
