@@ -425,6 +425,8 @@ def check_available_perturb_simple(child_prod, top_constraints):
 
 # Create some amount of offspring Q by adding fixed coordinate displacement to some 
 # randomly selected parent's genes/coordinates
+# FIXME: local_search currently is comparing top side pressure rod positions against
+# bottom constraints as well as top constraints. This is limiting pressure rod placement
 def local_search(pop, n_searched, localsearch_rate, on_prob, perturbrate, maxmag, typerate, nprods_top, nprods_bot, top_constraints, bot_constraints, all_on, rod_type):
     """
     Create offspring by adding coordinate displacement to randomly selected
@@ -824,17 +826,17 @@ def evaluation(pop, nobjs, gen, nprods_top, nprods_bot, inputfile, constraint_ge
     # Generate the XML files sequentially
     xml_filenames = []
     for i, valid_design in enumerate(valid_circles):
-        xml_filenames.append(constraints.design_to_xml(valid_design, df_PressureRods, root, inputfile, gen, i))
+        xml_filenames.append(constraints.design_to_xml_v2(valid_design, df_PressureRods, root, inputfile, gen, i))
         
     print("Running FEA")
     
     # Straight calculation version
-    results_mp = [constraints.runFEA_valid_circles(valid_circles[i], df_PressureRods, df_BoardStops, root, inputfile, gen, i) for i in range(pop.shape[0])]
+    results_mp = [constraints.runFEA_valid_circles_v2(valid_circles[i], df_PressureRods, df_Standoffs, root, inputfile, gen, i) for i in range(pop.shape[0])]
     
     # # Multiprocessing version
     # pool = multiprocessing.Pool(processes=ncpus)
     # # arg_tuples = [(xml_filenames[i]) for i in range(pop.shape[0])]
-    # arg_tuples = [(valid_circles[i], df_PressureRods, df_BoardStops, root, inputfile, gen, i) for i in range(pop.shape[0])]
+    # arg_tuples = [(valid_circles[i], df_PressureRods, df_Standoffs, root, inputfile, gen, i) for i in range(pop.shape[0])]
     # # arg_tuples = [(valid_circles[i], df_PressureRods, root, xml_filenames[i], gen, i) for i in range(pop.shape[0])]
     # # results_mp = pool.starmap(constraints.runFEA_new_path, arg_tuples)
     # results_mp = pool.starmap(constraints.runFEA_valid_circles, arg_tuples)
@@ -1133,11 +1135,14 @@ def main_optimization():
     
     # Estimate a number of pressure rods for the top side that would make sense
     # print("--- Estimating possible pressure rods ---")
-    nprods_small, nprods_large, pBoards_diff = constraints.grid_nprods(pBoards,pComponentsTop) # FIXME: Need to make this consider bottom side pressure rods
+    pBoards_diff_top = constraints.get_pBoards_diff_side(1, pBoards, pComponentsTop, I_Plate)
+    pBoards_diff_bot = constraints.get_pBoards_diff_side(2, pBoards, pComponentsBot, I_Plate)
+    nprods_small, nprods_large = constraints.grid_nprods_v2(pBoards_diff_top) # FIXME: Need to make this consider bottom side pressure rods
+    # nprods_small, nprods_large, pBoards_diff = constraints.grid_nprods(pBoards,pComponentsTop) # FIXME: Need to make this consider bottom side pressure rods
     
     # top_constraints = constraints.get_top_constraints(pBoards, pComponentsTop, df_Probes, pBoards_diff)
-    top_constraints = constraints.get_board_constraints_single_side(pBoards, pComponentsTop, 1, df_Probes, pBoards_diff)
-    bot_constraints = constraints.get_board_constraints_single_side(pBoards, pComponentsBot, 2, df_Probes, pBoards_diff)
+    top_constraints = constraints.get_board_constraints_single_side(pBoards, pComponentsTop, 1, df_Probes, pBoards_diff_top)
+    bot_constraints = constraints.get_board_constraints_single_side(pBoards, pComponentsBot, 2, df_Probes, pBoards_diff_bot)
     
     # Parameters
     print("Setting genetic algorithm parameters")
@@ -1160,7 +1165,7 @@ def main_optimization():
     
     nprods = 64
     nprods_top = 64
-    nprods_bot = 0
+    nstandoffs = 6
     print(f"nprods_small = {nprods_small}")
     print(f"nprods_large = {nprods_large}")
     nprods_top_input = input(f"Current nprods_top: {nprods_top}\n If this quantity is adequate press enter. Otherwise choose an integer value and press enter.\n")
@@ -1184,7 +1189,8 @@ def main_optimization():
     #              'Press-Fit Flat',
     #              '3.325" Tapered',
     #              '3.325" Flat']
-    pop = constraints.initialize_population_simple_v2(pop_size, nprods_top, nprods_bot, top_constraints, bot_constraints, all_on, on_prob, rod_type)    # initial parents population P
+    pop = constraints.initialize_population_simple_v3(pop_size, nprods_top, nstandoffs, top_constraints, bot_constraints, all_on, on_prob, rod_type)    # initial parents population P
+    # pop = constraints.initialize_population_simple_v2(pop_size, nprods_top, nprods_bot, top_constraints, bot_constraints, all_on, on_prob, rod_type)    # initial parents population P
     # pop = constraints.initialize_population_simple(pop_size, nprods, pBoards, pComponentsTop, df_Probes, pBoards_diff, all_on, on_prob_initial, rod_type)    # initial parents population P
     pop = np.asarray(pop)
     end_setup_time = time.time()
@@ -1196,9 +1202,9 @@ def main_optimization():
     # NSGA-II main loop
     for i in range(maximum_generation):
         print('\n\nGeneration:', i)
-        offspring_from_crossover = crossover_prods(pop, rate_crossover, nprods_top, nprods_bot, top_constraints, bot_constraints)
-        offspring_from_mutation = mutation(pop, rate_mutation, chance_mutation, nprods_top, nprods_bot, top_constraints, bot_constraints, all_on, on_prob, rod_type)
-        offspring_from_local_search = local_search(pop, n_searched, chance_localsearch, on_prob, perturbrate, maxmag, typerate, nprods_top, nprods_bot, top_constraints, bot_constraints, all_on, rod_type)
+        offspring_from_crossover = crossover_prods(pop, rate_crossover, nprods_top, nstandoffs, top_constraints, bot_constraints)
+        offspring_from_mutation = mutation(pop, rate_mutation, chance_mutation, nprods_top, nstandoffs, top_constraints, bot_constraints, all_on, on_prob, rod_type)
+        offspring_from_local_search = local_search(pop, n_searched, chance_localsearch, on_prob, perturbrate, maxmag, typerate, nprods_top, nstandoffs, top_constraints, bot_constraints, all_on, rod_type)
         # offspring_from_local_search = local_search(pop, n_searched, chance_localsearch, on_prob, perturbrate, maxmag, typerate, nprods, top_constraints, all_on, rod_type)
         
         # Append children (crossover, mutation, local search) to parents
@@ -1207,7 +1213,7 @@ def main_optimization():
         pop = np.append(pop, offspring_from_local_search, axis=0)
         
         print("Evaluating fitnesses...")
-        fitness_values = evaluation(pop, nobjs, i, nprods_top, nprods_bot, inputfile, constraint_geom)
+        fitness_values = evaluation(pop, nobjs, i, nprods_top, nstandoffs, inputfile, constraint_geom)
         # fitness_values = evaluation(pop, nobjs, i, nprods, inputfile, constraint_geom)
         fitness_values_temp = copy.deepcopy(fitness_values)
         genvals = i*np.ones((fitness_values_temp.shape[0],1))
@@ -1308,7 +1314,7 @@ def main_optimization():
     
     
     # Pareto front visualization
-    fitness_values = evaluation(pop, nobjs, i, nprods_top, nprods_bot, inputfile, constraint_geom)
+    fitness_values = evaluation(pop, nobjs, i, nprods_top, nstandoffs, inputfile, constraint_geom)
     index = np.arange(pop.shape[0]).astype(int)
     pareto_front_index = pareto_front_finding(fitness_values, index)
     pop = pop[pareto_front_index, :]
