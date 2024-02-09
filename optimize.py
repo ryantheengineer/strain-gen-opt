@@ -427,7 +427,7 @@ def check_available_perturb_simple(child_prod, top_constraints):
 # randomly selected parent's genes/coordinates
 # FIXME: local_search currently is comparing top side pressure rod positions against
 # bottom constraints as well as top constraints. This is limiting pressure rod placement
-def local_search(pop, n_searched, localsearch_rate, on_prob, perturbrate, maxmag, typerate, nprods_top, nprods_bot, top_constraints, bot_constraints, all_on, rod_type):
+def local_search(pop, n_searched, localsearch_rate, on_prob, perturbrate, maxmag, typerate, nprods_top, nstandoffs, top_constraints, bot_constraints, all_on, rod_type):
     """
     Create offspring by adding coordinate displacement to randomly selected
     genes in parent designs.
@@ -460,6 +460,7 @@ def local_search(pop, n_searched, localsearch_rate, on_prob, perturbrate, maxmag
 
     """
     print("Entering local search phase...creating altered versions of other chromosomes")
+    printperturbs = False
     offspring = np.zeros((n_searched, pop.shape[1]))
     for i in range(n_searched):
         # print(f"Local search {i} of {n_searched}")
@@ -469,7 +470,7 @@ def local_search(pop, n_searched, localsearch_rate, on_prob, perturbrate, maxmag
             parent1 = pop[r1]
             
             # Interpret each parent into PressureRod representation
-            parent1_prods = constraints.interpret_chromosome_to_prods_v2(parent1, nprods_top, nprods_bot)
+            parent1_prods = constraints.interpret_chromosome_to_prods_v2(parent1, nprods_top, nstandoffs)
             # parent1_prods = constraints.interpret_chromosome_to_prods(parent1, nprods)
             child_prods = copy.deepcopy(parent1_prods)
             
@@ -477,21 +478,26 @@ def local_search(pop, n_searched, localsearch_rate, on_prob, perturbrate, maxmag
             rod_types = ['Press-Fit Tapered',
                          'Press-Fit Flat',
                          '3.325" Tapered',
-                         '3.325" Flat']
-            pBoards_multi = top_constraints[0]
+                         '3.325" Flat'
+                         'ESD board stop']
+            pBoards_multi_top = top_constraints[0]
             top_probes = top_constraints[1]
             topcomponents = top_constraints[2]
+            pBoards_multi_bot = bot_constraints[0]
             bot_probes = bot_constraints[1]
             botcomponents = bot_constraints[2]
             
-            xmin, ymin, xmax, ymax = pBoards_multi.bounds
             for j in range(len(child_prods)):
                 if j < nprods_top:
                     sidenum = 1
                     side_constraints = copy.deepcopy(top_constraints)
+                    pBoards_multi = pBoards_multi_top
+                    xmin, ymin, xmax, ymax = pBoards_multi_top.bounds
                 else:
                     sidenum = 2
                     side_constraints = copy.deepcopy(bot_constraints)
+                    pBoards_multi = pBoards_multi_bot
+                    xmin, ymin, xmax, ymax = pBoards_multi_bot.bounds
                 chance = random.uniform(0,1)
                 if localsearch_rate > chance:
                     if not all_on:
@@ -527,6 +533,14 @@ def local_search(pop, n_searched, localsearch_rate, on_prob, perturbrate, maxmag
                                     if k == j:
                                         # Don't compare against the current pressure rod
                                         continue
+                                    # Don't compare top pressure rod positions to bottom standoff positions
+                                    if j < nprods_top:
+                                        if k >= nprods_top:
+                                            continue
+                                    # Don't compare bottom standoff positions to top pressure rod positions
+                                    if j >= nprods_top:
+                                        if k < nprods_top:
+                                            continue
                                     dist = constraints.centroid_distance(child_prods[j].tip, prod_chosen.tip)
                                     if dist < child_prods[j].ctc:
                                         # print(f"prod {j} was too close to another prod")
@@ -559,11 +573,11 @@ def local_search(pop, n_searched, localsearch_rate, on_prob, perturbrate, maxmag
                                         break
                                     # Position perturb first
                                     # Updated maxmag
-                                    if sidenum == 1:
-                                        maxmag_new = check_available_perturb_simple_v2(child_prods[j], top_constraints)
-                                    else:
-                                        maxmag_new = check_available_perturb_simple_v2(child_prods[j], bot_constraints)                                        
-                                    # maxmag_new = check_available_perturb_simple(child_prods[j], top_constraints)
+                                    # if sidenum == 1:
+                                    #     maxmag_new = check_available_perturb_simple_v2(child_prods[j], top_constraints)
+                                    # else:
+                                    #     maxmag_new = check_available_perturb_simple_v2(child_prods[j], bot_constraints)                                        
+                                    maxmag_new = check_available_perturb_simple(child_prods[j], side_constraints)
                                     maxmag_new = min([maxmag,maxmag_new])
                                     # print(f"\nmaxmag:\t{maxmag}")
                                     # print(f"maxmag_new:\t{maxmag_new}")
@@ -573,7 +587,8 @@ def local_search(pop, n_searched, localsearch_rate, on_prob, perturbrate, maxmag
                                         mag = random.uniform(0, maxmag_new)
                                     else:
                                         mag = random.uniform(0, maxmag_new/2)
-                                    print(f"Trying perturb with magnitude {mag}")
+                                    if printperturbs:
+                                        print(f"Trying perturb with magnitude {mag}")
                                     # mag = random.uniform(0, maxmag)
                                     xp = random.uniform(-mag, mag)
                                     yp = np.sqrt(mag**2 - xp**2)
@@ -589,7 +604,8 @@ def local_search(pop, n_searched, localsearch_rate, on_prob, perturbrate, maxmag
                                     # If it is not valid, break and keep the original position.
                                     checkPoint = Point(xnew, ynew)
                                     if not checkPoint.intersects(pBoards_multi):
-                                        print(f"Perturb for child {i}, pressure rod {j} was outside UUT bounds. Trying again.")
+                                        if printperturbs:
+                                            print(f"Perturb for child {i}, pressure rod {j} was outside UUT bounds. Trying again.")
                                         valid = False
                                         attempt += 1
                                         break
@@ -604,7 +620,8 @@ def local_search(pop, n_searched, localsearch_rate, on_prob, perturbrate, maxmag
                                     # Validate the perturbation here
                                     # Make sure pressure rod is within the UUT and make sure it doesn't intersect any components, using the appropriate buffer sizes
                                     if not child_prods[j].center.intersects(pBoards_multi):
-                                        print(f"Perturb for child {i}, pressure rod {j} was outside UUT bounds (2nd check). Trying again.")
+                                        if printperturbs:
+                                            print(f"Perturb for child {i}, pressure rod {j} was outside UUT bounds (2nd check). Trying again.")
                                         valid = False
                                         attempt += 1
                                         break
@@ -613,32 +630,43 @@ def local_search(pop, n_searched, localsearch_rate, on_prob, perturbrate, maxmag
                                     #     break
                                     if sidenum == 1:
                                         if child_prods[j].tip_component_buffer.intersects(topcomponents):
-                                            print(f"Perturb for child {i}, pressure rod {j} was too close to a top side component. Trying again.")
+                                            if printperturbs:
+                                                print(f"Perturb for child {i}, pressure rod {j} was too close to a top side component. Trying again.")
                                             valid = False
                                             attempt += 1
                                             break
                                     else:
                                         if child_prods[j].tip_component_buffer.intersects(botcomponents):
-                                            print(f"Perturb for child {i}, pressure rod {j} was too close to a bottom side component. Trying again.")
+                                            if printperturbs:
+                                                print(f"Perturb for child {i}, pressure rod {j} was too close to a bottom side component. Trying again.")
                                             valid = False
                                             attempt += 1
                                             break
-                                        
+                                    
+                                    # Additional check for bottom placement
+                                    if sidenum == 2:
+                                        if not child_prods[j].tip_UUT_buffer.within(pBoards_multi):
+                                            valid = False
+                                            attempt += 1
+                                            break
                                     
                                     # Make sure the pressure rod isn't too close to any top probes
-                                    if top_probes:
-                                        if child_prods[j].tip_from_top_probe_buffer.intersects(top_probes):
-                                            print(f"Perturb for child {i}, pressure rod {j} was too close to a top side probe. Trying again.")
-                                            valid = False
-                                            attempt += 1
-                                            break
-                                    if bot_probes:
-                                        if child_prods[j].tip_from_top_probe_buffer.intersects(bot_probes):
-                                            print(f"Perturb for child {i}, pressure rod {j} was too close to a bottom side probe. Trying again.")
-                                            valid = False
-                                            attempt += 1
-                                            break
-                                        
+                                    if sidenum == 1:
+                                        if top_probes:
+                                            if child_prods[j].tip_from_top_probe_buffer.intersects(top_probes):
+                                                if printperturbs:
+                                                    print(f"Perturb for child {i}, pressure rod {j} was too close to a top side probe. Trying again.")
+                                                valid = False
+                                                attempt += 1
+                                                break
+                                    if sidenum == 2:
+                                        if bot_probes:
+                                            if child_prods[j].tip_from_top_probe_buffer.intersects(bot_probes):
+                                                if printperturbs:
+                                                    print(f"Perturb for child {i}, pressure rod {j} was too close to a bottom side probe. Trying again.")
+                                                valid = False
+                                                attempt += 1
+                                                break
                                         
                                     # Make sure pressure rod doesn't conflict with any previously-placed pressure rods
                                     for k,prod_chosen in enumerate(child_prods):
@@ -652,7 +680,8 @@ def local_search(pop, n_searched, localsearch_rate, on_prob, perturbrate, maxmag
                                             continue
                                         dist = constraints.centroid_distance(child_prods[j].tip, prod_chosen.tip)
                                         if dist < child_prods[j].ctc:
-                                            print(f"Perturb for child{i}, pressure rod {j} was too close to a previously-placed pressure rod. Trying again.")
+                                            if printperturbs:
+                                                print(f"Perturb for child{i}, pressure rod {j} was too close to a previously-placed pressure rod. Trying again.")
                                             valid = False
                                             attempt += 1
                                             break
@@ -669,17 +698,20 @@ def local_search(pop, n_searched, localsearch_rate, on_prob, perturbrate, maxmag
                                 if valid == False:
                                     child_prods[j].update_pressure_rod(xold, yold, child_prods[j].rod_type, child_prods[j].on)
                                     if attempt < max_attempts:
-                                        print(f"UNSUCCESSFUL position perturb for child {i}, pressure rod {j}. Trying again.\n")
+                                        if printperturbs:
+                                            print(f"UNSUCCESSFUL position perturb for child {i}, pressure rod {j}. Trying again.\n")
                                         valid = True
                                         continue
                                     else:
-                                        print(f"UNSUCCESSFUL position perturb, MAX ATTEMPTS REACHED ({max_attempts}).\n")
+                                        if printperturbs:
+                                            print(f"UNSUCCESSFUL position perturb, MAX ATTEMPTS REACHED ({max_attempts}).\n")
                                         break
                                 # if valid == False:
                                 #     break
                                 
                                 if valid == True:
-                                    print(f"SUCCESSFUL position perturb for child {i}, pressure rod {j} with magnitude {mag}\n")
+                                    if printperturbs:
+                                        print(f"SUCCESSFUL position perturb for child {i}, pressure rod {j} with magnitude {mag}\n")
                                     break
                         
                         if rod_type not in rod_types:
@@ -688,9 +720,12 @@ def local_search(pop, n_searched, localsearch_rate, on_prob, perturbrate, maxmag
                                 # Get the index of the current rod_type in the rod_types list
                                 current_type_idx = rod_types.index(child_prods[j].rod_type)
                                 # Randomly shuffle the indices of the rod types that are not used
-                                available_indices = [0,1,2,3]
-                                available_indices.remove(current_type_idx)
-                                random.shuffle(available_indices)
+                                if sidenum == 1:
+                                    available_indices = [0,1,2,3]
+                                    available_indices.remove(current_type_idx)
+                                    random.shuffle(available_indices)
+                                else:
+                                    available_indices = []
                                 
                                 for idx in available_indices:
                                     valid = True
@@ -708,21 +743,41 @@ def local_search(pop, n_searched, localsearch_rate, on_prob, perturbrate, maxmag
                                     # if not child_prods[j].tip_UUT_buffer.within(pBoards_multi):
                                     #     valid = False
                                     #     continue
-                                    if child_prods[j].tip_component_buffer.intersects(topcomponents):
-                                        valid = False
-                                        continue
-                                    
-                                    # Make sure the pressure rod isn't too close to any top probes
-                                    if top_probes:
-                                        if child_prods[j].tip_from_top_probe_buffer.intersects(top_probes):
+                                    if sidenum == 1:
+                                        if child_prods[j].tip_component_buffer.intersects(topcomponents):
                                             valid = False
                                             continue
+                                    else:
+                                        if child_prods[j].tip_component_buffer.intersects(botcomponents):
+                                            valid = False
+                                            continue
+                                    
+                                    # Make sure the pressure rod isn't too close to any probes
+                                    if sidenum == 1:
+                                        if top_probes:
+                                            if child_prods[j].tip_from_top_probe_buffer.intersects(top_probes):
+                                                valid = False
+                                                continue
+                                    else:
+                                        if bot_probes:
+                                            if child_prods[j].tip_from_top_probe_buffer.intersects(bot_probes):
+                                                valid = False
+                                                continue
+                                        
                                         
                                     # Make sure pressure rod doesn't conflict with any previously-placed pressure rods
                                     for k,prod_chosen in enumerate(child_prods):
                                         if k == j:
                                             # Don't compare against the current pressure rod
                                             continue
+                                        # Don't compare top pressure rod positions to bottom standoff positions
+                                        if j < nprods_top:
+                                            if k >= nprods_top:
+                                                continue
+                                        # Don't compare bottom standoff positions to top pressure rod positions
+                                        if j >= nprods_top:
+                                            if k < nprods_top:
+                                                continue
                                         dist = constraints.centroid_distance(child_prods[j].tip, prod_chosen.tip)
                                         if dist < child_prods[j].ctc:
                                             valid = False
@@ -741,7 +796,8 @@ def local_search(pop, n_searched, localsearch_rate, on_prob, perturbrate, maxmag
                 if child_prods[j] != parent1_prods[j]:
                     complete = True
                     # print(f"Prod {j} has been changed")
-                    print("##### At least one gene changed via local search #####\n\n")
+                    if printperturbs:
+                        print("##### At least one gene changed via local search #####\n\n")
                     break
                 else:
                     pass
@@ -826,22 +882,23 @@ def evaluation(pop, nobjs, gen, nprods_top, nprods_bot, inputfile, constraint_ge
     # Generate the XML files sequentially
     xml_filenames = []
     for i, valid_design in enumerate(valid_circles):
-        xml_filenames.append(constraints.design_to_xml_v2(valid_design, df_PressureRods, root, inputfile, gen, i))
+        xml_filenames.append(constraints.design_to_xml_v2(valid_design, df_PressureRods, df_Standoffs, root, inputfile, gen, i))
+        # xml_filenames.append(constraints.design_to_xml_v2(valid_design, df_PressureRods, root, inputfile, gen, i))
         
     print("Running FEA")
     
-    # Straight calculation version
-    results_mp = [constraints.runFEA_valid_circles_v2(valid_circles[i], df_PressureRods, df_Standoffs, root, inputfile, gen, i) for i in range(pop.shape[0])]
+    # # Straight calculation version
+    # results_mp = [constraints.runFEA_valid_circles_v2(valid_circles[i], df_PressureRods, df_Standoffs, root, inputfile, gen, i) for i in range(pop.shape[0])]
     
-    # # Multiprocessing version
-    # pool = multiprocessing.Pool(processes=ncpus)
-    # # arg_tuples = [(xml_filenames[i]) for i in range(pop.shape[0])]
-    # arg_tuples = [(valid_circles[i], df_PressureRods, df_Standoffs, root, inputfile, gen, i) for i in range(pop.shape[0])]
-    # # arg_tuples = [(valid_circles[i], df_PressureRods, root, xml_filenames[i], gen, i) for i in range(pop.shape[0])]
-    # # results_mp = pool.starmap(constraints.runFEA_new_path, arg_tuples)
-    # results_mp = pool.starmap(constraints.runFEA_valid_circles, arg_tuples)
-    # pool.close()
-    # pool.join()
+    # Multiprocessing version
+    pool = multiprocessing.Pool(processes=ncpus)
+    # arg_tuples = [(xml_filenames[i]) for i in range(pop.shape[0])]
+    arg_tuples = [(valid_circles[i], df_PressureRods, df_Standoffs, root, inputfile, gen, i) for i in range(pop.shape[0])]
+    # arg_tuples = [(valid_circles[i], df_PressureRods, root, xml_filenames[i], gen, i) for i in range(pop.shape[0])]
+    # results_mp = pool.starmap(constraints.runFEA_new_path, arg_tuples)
+    results_mp = pool.starmap(constraints.runFEA_valid_circles, arg_tuples)
+    pool.close()
+    pool.join()
     
     
     # Add verification here that all output files have been created. If any have not been created, run those FEA cases specifically.
