@@ -1858,8 +1858,8 @@ def runFEA_valid_circles(valid_circles, df_PressureRods, df_Standoffs, root, inp
     
     return (exit_code)
 
-def runFEA_valid_circles_v2(valid_circles, df_PressureRods, df_Standoffs, root, inputfile, gen, iteration):
-    new_path = design_to_xml_v2(valid_circles, df_PressureRods, df_Standoffs, root, inputfile, gen, iteration)
+def runFEA_valid_circles_v2(valid_circles, nprods_top, df_PressureRods, df_Standoffs, root, inputfile, gen, iteration):
+    new_path = design_to_xml_v2(valid_circles, nprods_top, df_PressureRods, df_Standoffs, root, inputfile, gen, iteration)
     FEApath = runFEA.loadFEApath('FEApath.pk')
     exit_code = runFEA.runFEA(FEApath, new_path)    
     return (exit_code)
@@ -1971,7 +1971,7 @@ def design_to_xml(valid_circles, df_PressureRods, root, inputfile, gen, iteratio
     return new_path
     
 
-def design_to_xml_v2(valid_circles, df_PressureRods, df_Standoffs, root, inputfile, gen, iteration):
+def design_to_xml_v2(valid_circles, nprods_top, df_PressureRods, df_Standoffs, root, inputfile, gen, iteration):
     # Ensure correct type is used for integer columns
     df_PressureRods['unimplemented1'] = df_PressureRods['unimplemented1'].astype(int)
     df_PressureRods['unimplemented2'] = df_PressureRods['unimplemented2'].astype(int)
@@ -2009,12 +2009,13 @@ def design_to_xml_v2(valid_circles, df_PressureRods, df_Standoffs, root, inputfi
     
     for instance,df in enumerate(df_list):
         if len(df) == 0:
-            if instance==0:
-                print("No top side pressure rods found in runFEA_valid_circles")
-            else:
-                # pass
-                print("No board stops (standoffs) found in runFEA_valid_circles")
-            continue
+            # if instance==0:
+            #     print("No top side pressure rods found in runFEA_valid_circles")
+            # else:
+            #     # pass
+            #     print("No board stops (standoffs) found in runFEA_valid_circles")
+            # continue
+            pass
         else:
             
             df_temp = df.loc[0,:]
@@ -2025,10 +2026,15 @@ def design_to_xml_v2(valid_circles, df_PressureRods, df_Standoffs, root, inputfi
             
             xnew = []
             ynew = []
-            for valid_circle in valid_circles:
-                xnew.append(valid_circle.centroid.x)
-                ynew.append(valid_circle.centroid.y)
-            
+            if instance == 0:
+                for valid_circle in valid_circles[:nprods_top]:
+                    xnew.append(valid_circle.centroid.x)
+                    ynew.append(valid_circle.centroid.y)
+            else:
+                for valid_circle in valid_circles[nprods_top:]:
+                    xnew.append(valid_circle.centroid.x)
+                    ynew.append(valid_circle.centroid.y)
+                                
             newdata = {}
             for col in df_temp.index:
                 if col == "x":
@@ -2036,7 +2042,10 @@ def design_to_xml_v2(valid_circles, df_PressureRods, df_Standoffs, root, inputfi
                 elif col == "y":
                     newdata[col] = ynew
                 else:
-                    newdata[col] = [basic_vals[col] for valid_circle in valid_circles]
+                    if instance == 0:
+                        newdata[col] = [basic_vals[col] for valid_circle in valid_circles[:nprods_top]]
+                    else:
+                        newdata[col] = [basic_vals[col] for valid_circle in valid_circles[nprods_top:]]
                     
             df_update = pd.DataFrame(newdata)
             

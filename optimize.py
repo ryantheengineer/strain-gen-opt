@@ -882,7 +882,7 @@ def evaluation(pop, nobjs, gen, nprods_top, nprods_bot, inputfile, constraint_ge
     # Generate the XML files sequentially
     xml_filenames = []
     for i, valid_design in enumerate(valid_circles):
-        xml_filenames.append(constraints.design_to_xml_v2(valid_design, df_PressureRods, df_Standoffs, root, inputfile, gen, i))
+        xml_filenames.append(constraints.design_to_xml_v2(valid_design, nprods_top, df_PressureRods, df_Standoffs, root, inputfile, gen, i))
         # xml_filenames.append(constraints.design_to_xml_v2(valid_design, df_PressureRods, root, inputfile, gen, i))
         
     print("Running FEA")
@@ -893,10 +893,10 @@ def evaluation(pop, nobjs, gen, nprods_top, nprods_bot, inputfile, constraint_ge
     # Multiprocessing version
     pool = multiprocessing.Pool(processes=ncpus)
     # arg_tuples = [(xml_filenames[i]) for i in range(pop.shape[0])]
-    arg_tuples = [(valid_circles[i], df_PressureRods, df_Standoffs, root, inputfile, gen, i) for i in range(pop.shape[0])]
+    arg_tuples = [(valid_circles[i], nprods_top, df_PressureRods, df_Standoffs, root, inputfile, gen, i) for i in range(pop.shape[0])]
     # arg_tuples = [(valid_circles[i], df_PressureRods, root, xml_filenames[i], gen, i) for i in range(pop.shape[0])]
     # results_mp = pool.starmap(constraints.runFEA_new_path, arg_tuples)
-    results_mp = pool.starmap(constraints.runFEA_valid_circles, arg_tuples)
+    results_mp = pool.starmap(constraints.runFEA_valid_circles_v2, arg_tuples)
     pool.close()
     pool.join()
     
@@ -1203,11 +1203,11 @@ def main_optimization():
     
     # Parameters
     print("Setting genetic algorithm parameters")
-    pop_size = 20              # initial number of chromosomes
-    rate_crossover = 6         # number of chromosomes that we apply crossover to
-    rate_mutation = 6         # number of chromosomes that we apply mutation to
+    pop_size = 6              # initial number of chromosomes
+    rate_crossover = 2         # number of chromosomes that we apply crossover to
+    rate_mutation = 2         # number of chromosomes that we apply mutation to
     chance_mutation = 0.2       # normalized percent chance that an individual pressure rod will be mutated
-    n_searched = 6              # number of chromosomes that we apply local_search to
+    n_searched = 2              # number of chromosomes that we apply local_search to
     chance_localsearch = 0.2
     on_prob_initial = 0.5   # Initial percentage chance that a pressure rod will be on (only in the initial population)
     on_prob = 0.8           # Likelihood an "off" pressure rod will be switched on
