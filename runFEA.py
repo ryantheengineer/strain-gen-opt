@@ -14,6 +14,7 @@ from tkinter import filedialog as fd
 import pickle
 import re
 from datetime import datetime
+import numpy as np
 
 def chooseFEApath(initialdir):
     filetypes = (("Executable", ["*.exe"]),)
@@ -99,6 +100,25 @@ def resultsToDataframe(inputfile):
     df = pd.read_csv(meshfile)
     return df
 
+
+def resultsToDataframe_v2(inputfile):
+    directory = pathlib.Path(inputfile)
+    directory = str(directory.parent) + "/Output"
+    path, filename = os.path.split(inputfile)
+    filename = os.path.splitext(filename)[0]
+    
+    # Get the most recently modified subdirectory that matches the needed substring from the inputfile
+    latest_subdir = find_latest_folder_with_substring(directory, filename)
+    # latest_subdir = max(glob.glob(os.path.join(directory, f'{filename}*/')), key=os.path.getmtime) # FIXME: Can't use this method with multiprocessing - gives multiple fitnesses that are identical
+    # latest_subdir = max(glob.glob(os.path.join(directory, '*/')), key=os.path.getmtime) # FIXME: Can't use this method with multiprocessing - gives multiple fitnesses that are identical
+    
+    meshfile = latest_subdir + "\\FEAReport.csv"
+    
+    df = pd.read_csv(meshfile)
+    return df
+
+
+
 def getFitness(dfmesh):
     # abssums = dfmesh.abs().sum()
     # absmeans = dfmesh.abs().mean()
@@ -110,6 +130,19 @@ def getFitness(dfmesh):
     
     principalStrain_min = absmax["principalStrain_min"]
     principalStrain_max = absmax["principalStrain_max"]
+    return strain_xx, strain_yy, strain_xy, principalStrain_min, principalStrain_max
+
+
+def getFitness_v2(dfreport):
+    dfreport.set_index('Row', inplace=True)
+    strain_xx = np.max([np.abs(dfreport.loc['horizontalStrain_max','Value']),
+                        np.abs(dfreport.loc['horizontalStrain_min','Value'])])
+    strain_yy = np.max([np.abs(dfreport.loc['verticalStrain_max','Value']),
+                        np.abs(dfreport.loc['verticalStrain_min','Value'])])
+    strain_xy = np.max([np.abs(dfreport.loc['shearStrain_max','Value']),
+                        np.abs(dfreport.loc['shearStrain_min','Value'])])
+    principalStrain_min = np.abs(dfreport.loc['principalStrain_max','Value'])
+    principalStrain_max = np.abs(dfreport.loc['principalStrain_min','Value'])
     return strain_xx, strain_yy, strain_xy, principalStrain_min, principalStrain_max
     
 

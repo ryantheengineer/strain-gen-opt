@@ -1875,9 +1875,11 @@ def read_FEA_results(root, inputfile, gen, iteration):
     path, filename = os.path.split(inputfile)
     new_path = path + "/" + new_filename
     
-    dfmesh = runFEA.resultsToDataframe(new_path)
+    dfmesh = runFEA.resultsToDataframe_v2(new_path)
+    # dfmesh = runFEA.resultsToDataframe(new_path)
     
-    strain_xx, strain_yy, strain_xy, principalStrain_min, principalStrain_max = runFEA.getFitness(dfmesh)
+    strain_xx, strain_yy, strain_xy, principalStrain_min, principalStrain_max = runFEA.getFitness_v2(dfmesh)
+    # strain_xx, strain_yy, strain_xy, principalStrain_min, principalStrain_max = runFEA.getFitness(dfmesh)
     
     results = (strain_xx, strain_yy, strain_xy, principalStrain_min, principalStrain_max)
     
@@ -2109,9 +2111,11 @@ def runFEA_new_path(new_path_xml):
     FEApath = runFEA.loadFEApath('FEApath.pk')
     runFEA.runFEA(FEApath, new_path_xml)
     
-    dfmesh = runFEA.resultsToDataframe(new_path_xml)
+    dfmesh = runFEA.resultsToDataframe_v2(new_path_xml)
+    # dfmesh = runFEA.resultsToDataframe(new_path_xml)
     
-    strain_xx, strain_yy, strain_xy, principalStrain_min, principalStrain_max = runFEA.getFitness(dfmesh)
+    strain_xx, strain_yy, strain_xy, principalStrain_min, principalStrain_max = runFEA.getFitness_v2(dfmesh)
+    # strain_xx, strain_yy, strain_xy, principalStrain_min, principalStrain_max = runFEA.getFitness(dfmesh)
     
     results = (strain_xx, strain_yy, strain_xy, principalStrain_min, principalStrain_max)
     
