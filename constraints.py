@@ -377,16 +377,17 @@ def get_pBoards_diff_side(sidenum, pBoards, pComponentsSide, I_Plate):
         pBoards_diff.append(UUT_poly_ext)
     
     sidecomponents = []
-    if type(pComponentsSide) is not list:
-        print(f"pComponentsSide is not a list. It is a {type(pComponentsSide)}")
-        if pComponentsSide.geom_type == "MultiPolygon":
-            pComponentsSide = list(pComponentsSide.geoms)
-    for inner in pComponentsSide:            # NOTE: pComponentsSide is expected to be a list of Polygons
-        sidecomponents.append(inner)
-    
-    sidecomponents = unary_union(sidecomponents)
-    if sidecomponents.geom_type == "MultiPolygon":
-        sidecomponents = list(sidecomponents.geoms)
+    if pComponentsSide is not None:
+        if type(pComponentsSide) is not list:
+            print(f"pComponentsSide is not a list. It is a {type(pComponentsSide)}")
+            if pComponentsSide.geom_type == "MultiPolygon":
+                pComponentsSide = list(pComponentsSide.geoms)
+        for inner in pComponentsSide:            # NOTE: pComponentsSide is expected to be a list of Polygons
+            sidecomponents.append(inner)
+        
+        sidecomponents = unary_union(sidecomponents)
+        if sidecomponents.geom_type == "MultiPolygon":
+            sidecomponents = list(sidecomponents.geoms)
     
     # Subtract interiors from the exterior polygon or multipolygon
     for i,board in enumerate(pBoards_diff):
@@ -508,12 +509,14 @@ def grid_nprods_v2(pBoards_diff):
     valid_prods_large = []
     for board in pBoards_diff:        
         xmin, ymin, xmax, ymax = board.bounds
+        if any(np.isnan([xmin, ymin, xmax, ymax])): # Skip any boards that contain nan boundary values
+            continue
         prods_sm = []
         prods_lg = []
         radius_sm = 0.09/2
         radius_lg = 0.315/2
         resolution = 0.375
-        for x in np.arange(xmin+radius_sm, xmax, resolution):
+        for x in np.arange(xmin+radius_sm, xmax, resolution):   # FIXME: Example 4 gives error ValueError: arange: cannot compute length (happens because board.bounds are nan for some board)
             for y in np.arange(ymin+radius_sm, ymax, resolution):
                 c_sm = place_circle(x, y, radius_sm)
                 prods_sm.append(c_sm)
