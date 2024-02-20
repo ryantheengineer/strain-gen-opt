@@ -1203,11 +1203,11 @@ def main_optimization():
     
     # Parameters
     print("Setting genetic algorithm parameters")
-    pop_size = 30              # initial number of chromosomes
-    rate_crossover = 10         # number of chromosomes that we apply crossover to
-    rate_mutation = 10         # number of chromosomes that we apply mutation to
+    pop_size = 5              # initial number of chromosomes
+    rate_crossover = 1         # number of chromosomes that we apply crossover to
+    rate_mutation = 1         # number of chromosomes that we apply mutation to
     chance_mutation = 0.2       # normalized percent chance that an individual pressure rod will be mutated
-    n_searched = 10              # number of chromosomes that we apply local_search to
+    n_searched = 1              # number of chromosomes that we apply local_search to
     chance_localsearch = 0.2
     on_prob_initial = 0.5   # Initial percentage chance that a pressure rod will be on (only in the initial population)
     on_prob = 0.8           # Likelihood an "off" pressure rod will be switched on

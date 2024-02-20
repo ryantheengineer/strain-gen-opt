@@ -2062,15 +2062,19 @@ def design_to_xml_v2(valid_circles, nprods_top, df_PressureRods, df_Standoffs, r
                 splitrow = row.split()
                 newrow = []
                 for i,ele in enumerate(splitrow):
-                    if i==13:
-                        newrow.append(' '.join(splitrow[13:15]))
-                    elif i==14:
+                    if i==10:
+                        newrow.append(''.join(splitrow[10:13]))
+                    elif i==11:
                         continue
-                    elif i==18:
-                        newrow.append(''.join(splitrow[18:]))
-                    elif i==19:
+                    elif i==12:
                         continue
+                    elif i==15:
+                        newrow.append(' '.join(splitrow[15:17]))
                     elif i==20:
+                        newrow.append(''.join(splitrow[20:]))
+                    elif i==21:
+                        continue
+                    elif i==22:
                         continue
                     else:
                         newrow.append(ele)
