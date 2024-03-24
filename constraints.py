@@ -107,7 +107,15 @@ def get_fixture_geometry(root, identifier):
         polys.append(Polygon(vertices))
         
         
-    if fixture is not None:
+    if (fixture is None):
+        region_polys = None
+        numRegions = None
+        numHoles = None
+    elif len(fixture) <= 0:
+        region_polys = None
+        numRegions = None
+        numHoles = None                
+    else:
         numRegions = int(fixture.find('.//numRegions').text)
         numHoles = int(fixture.find('.//numHoles').text)
         if numRegions:
@@ -128,10 +136,10 @@ def get_fixture_geometry(root, identifier):
                 # vertices_elem = hole.findall('.//vertex')
                 # vertices = [vertex.text.split("|") for vertex in vertices_elem]
                 # hole_polys.append(Polygon(vertices))
-    else:
-        region_polys = None
-        numRegions = None
-        numHoles = None
+    # else:
+    #     region_polys = None
+    #     numRegions = None
+    #     numHoles = None
         
     # If there are holes, determine which region they belong to and subtract
     # them to make a list of complete polygons
@@ -324,26 +332,34 @@ class PressureRod():
         
     def select_rod_type(self, rod_type):
         if rod_type == 'Press-Fit Tapered':
-            dtop = 0.25
             dtip = 0.09
-        elif rod_type == 'Press-Fit Flat':
+            ddrill = 0.124
             dtop = 0.25
+        elif rod_type == 'Press-Fit Flat':
             dtip = 0.19
+            ddrill = 0.124
+            dtop = 0.25
         elif rod_type == '3.325" Tapered':
-            dtop = 0.315
             dtip = 0.10
-        elif rod_type == '3.325" Flat':
+            ddrill = 0.192
             dtop = 0.315
+        elif rod_type == '3.325" Flat':
             dtip = 0.315
+            ddrill = 0.192
+            dtop = 0.315
         elif rod_type == 'ESD board stop':  # Special case where we use the PressureRod class to make a board stop
-            dtop = 0.15
             dtip = 0.15
+            dtop = 0.15
+            ddrill = 0.15
+            
+            
             self.tip_from_UUT_edge = 0.1
         else:
             raise ValueError("ERROR: Invalid rod_type string")
         self.rod_type = rod_type
         self.dtop = dtop
         self.dtip = dtip
+        self.ddrill = ddrill
         
     def update_pressure_rod(self, new_x, new_y, new_rod_type, new_on):
         self.x = new_x
@@ -791,7 +807,7 @@ def create_chromosome_v2(nprods_top, nprods_bot, top_constraints, bot_constraint
         tries = 10
         grid_tries = 10
         
-        plotting = False
+        plotting = True
         
         # Add grid searching method
         grid_size = 1.0
@@ -1734,6 +1750,21 @@ def prods_to_valid_circles(prods):
     valid_circles = [prod.tip for prod in prods if prod.on]
     return valid_circles
 
+def prods_to_tip_radii(prods):
+    tip_radii = [prod.dtip/2 for prod in prods if prod.on]
+    return tip_radii
+
+def prods_to_drill_radii(prods):
+    drill_radii = [prod.ddrill/2 for prod in prods if prod.on]
+    return drill_radii
+
+def prods_to_top_radii(prods):
+    top_radii = [prod.dtop/2 for prod in prods if prod.on]
+    return top_radii
+
+# def prods_to_radii_list(prods):
+#     radii_list = [[prod.dtip/2, prod.ddrill/2, prod.dtop/2] for prod in prods if prod.on]
+#     return radii_list
 
 # %% FEA functions
 def runFEA_valid_circles(valid_circles, df_PressureRods, df_Standoffs, root, inputfile, gen, iteration):
@@ -1852,7 +1883,7 @@ def runFEA_valid_circles(valid_circles, df_PressureRods, df_Standoffs, root, inp
     new_filename = f"FEA_GEN{gen}_ITER{iteration}.xml"
     path, filename = os.path.split(inputfile)
     new_path = path + "/" + new_filename
-    tree.write(new_path)
+    tree.write(new_path, encoding="UTF-8", xml_declaration=True)
     
     FEApath = runFEA.loadFEApath('FEApath.pk')
     exit_code = runFEA.runFEA(FEApath, new_path)
@@ -1861,8 +1892,8 @@ def runFEA_valid_circles(valid_circles, df_PressureRods, df_Standoffs, root, inp
     
     return (exit_code)
 
-def runFEA_valid_circles_v2(valid_circles, nprods_top, df_PressureRods, df_Standoffs, root, inputfile, gen, iteration):
-    new_path = design_to_xml_v2(valid_circles, nprods_top, df_PressureRods, df_Standoffs, root, inputfile, gen, iteration)
+def runFEA_valid_circles_v2(valid_circles, tip_radii, drill_radii, top_radii, nprods_top, df_PressureRods, df_Standoffs, root, inputfile, gen, iteration):
+    new_path = design_to_xml_v2(valid_circles, tip_radii, drill_radii, top_radii, nprods_top, df_PressureRods, df_Standoffs, root, inputfile, gen, iteration)
     FEApath = runFEA.loadFEApath('FEApath.pk')
     exit_code = runFEA.runFEA(FEApath, new_path)    
     return (exit_code)
@@ -1971,12 +2002,12 @@ def design_to_xml(valid_circles, df_PressureRods, root, inputfile, gen, iteratio
     new_filename = f"FEA_GEN{gen}_ITER{iteration}.xml"
     path, filename = os.path.split(inputfile)
     new_path = path + "/" + new_filename
-    tree.write(new_path)
+    tree.write(new_path, encoding="UTF-8", xml_declaration=True)
     
     return new_path
     
 
-def design_to_xml_v2(valid_circles, nprods_top, df_PressureRods, df_Standoffs, root, inputfile, gen, iteration):
+def design_to_xml_v2(valid_circles, tip_radii, drill_radii, top_radii, nprods_top, df_PressureRods, df_Standoffs, root, inputfile, gen, iteration):
     # Ensure correct type is used for integer columns
     df_PressureRods['unimplemented1'] = df_PressureRods['unimplemented1'].astype(int)
     df_PressureRods['unimplemented2'] = df_PressureRods['unimplemented2'].astype(int)
@@ -2031,14 +2062,17 @@ def design_to_xml_v2(valid_circles, nprods_top, df_PressureRods, df_Standoffs, r
             
             xnew = []
             ynew = []
+            radiinew = []
             if instance == 0:
-                for valid_circle in valid_circles[:nprods_top]:
+                for i,valid_circle in enumerate(valid_circles[:nprods_top]):
                     xnew.append(valid_circle.centroid.x)
                     ynew.append(valid_circle.centroid.y)
+                    radiinew.append([tip_radii[i], drill_radii[i], top_radii[i]])
             else:
-                for valid_circle in valid_circles[nprods_top:]:
+                for i,valid_circle in enumerate(valid_circles[nprods_top:]):
                     xnew.append(valid_circle.centroid.x)
                     ynew.append(valid_circle.centroid.y)
+                    radiinew.append([tip_radii[i], drill_radii[i], top_radii[i]])                    
                                 
             newdata = {}
             for col in df_temp.index:
@@ -2046,6 +2080,8 @@ def design_to_xml_v2(valid_circles, nprods_top, df_PressureRods, df_Standoffs, r
                     newdata[col] = xnew
                 elif col == "y":
                     newdata[col] = ynew
+                elif col == "radii":
+                    newdata[col] = radiinew
                 else:
                     if instance == 0:
                         newdata[col] = [basic_vals[col] for valid_circle in valid_circles[:nprods_top]]
@@ -2070,6 +2106,8 @@ def design_to_xml_v2(valid_circles, nprods_top, df_PressureRods, df_Standoffs, r
                         continue
                     elif i==15:
                         newrow.append(' '.join(splitrow[15:17]))
+                    elif i==16:
+                        continue
                     elif i==20:
                         newrow.append(''.join(splitrow[20:]))
                     elif i==21:
@@ -2105,7 +2143,7 @@ def design_to_xml_v2(valid_circles, nprods_top, df_PressureRods, df_Standoffs, r
     new_filename = f"FEA_GEN{gen}_ITER{iteration}.xml"
     path, filename = os.path.split(inputfile)
     new_path = path + "/" + new_filename
-    tree.write(new_path)
+    tree.write(new_path, encoding="UTF-8", xml_declaration=True)
     
     return new_path
 

@@ -815,7 +815,7 @@ def local_search(pop, n_searched, localsearch_rate, on_prob, perturbrate, maxmag
     return offspring    # arr(loc_search_size x n_var)
 
 # Calculate fitness (obj function) values for each chromosome/solution
-def evaluation(pop, nobjs, gen, nprods_top, nprods_bot, inputfile, constraint_geom):
+def evaluation(pop, nobjs, gen, nprods_top, nprods_bot, inputfile, constraint_geom, all_on, on_prob, rod_type):
     """
     Run FEA on the current generation and retrieve the results.
 
@@ -869,31 +869,42 @@ def evaluation(pop, nobjs, gen, nprods_top, nprods_bot, inputfile, constraint_ge
     df_BoardStops = constraint_geom[15]
     df_Standoffs = constraint_geom[16]
     
+    pBoards_diff_top = constraints.get_pBoards_diff_side(1, pBoards, pComponentsTop, I_Plate)
+    pBoards_diff_bot = constraints.get_pBoards_diff_side(2, pBoards, pComponentsBot, I_Plate)
+    top_constraints = constraints.get_board_constraints_single_side(pBoards, pComponentsTop, 1, df_Probes, pBoards_diff_top)
+    bot_constraints = constraints.get_board_constraints_single_side(pBoards, pComponentsBot, 2, df_Probes, pBoards_diff_bot)
+    
     # ncpus = 2
     ncpus = multiprocessing.cpu_count()
     
     prods = []
     valid_circles = []
+    tip_radii = []
+    drill_radii = []
+    top_radii = []
     for i, chromosome in enumerate(pop):
         prods.append(constraints.interpret_chromosome_to_prods_v2(chromosome, nprods_top, nprods_bot))
         # prods.append(constraints.interpret_chromosome_to_prods(chromosome, nprods))
         valid_circles.append(constraints.prods_to_valid_circles(prods[i]))
+        tip_radii.append(constraints.prods_to_tip_radii(prods[i]))
+        drill_radii.append(constraints.prods_to_drill_radii(prods[i]))
+        top_radii.append(constraints.prods_to_top_radii(prods[i]))
         
-    # Generate the XML files sequentially
-    xml_filenames = []
-    for i, valid_design in enumerate(valid_circles):
-        xml_filenames.append(constraints.design_to_xml_v2(valid_design, nprods_top, df_PressureRods, df_Standoffs, root, inputfile, gen, i))
-        # xml_filenames.append(constraints.design_to_xml_v2(valid_design, df_PressureRods, root, inputfile, gen, i))
+    # # Generate the XML files sequentially
+    # xml_filenames = []
+    # for i, valid_design in enumerate(valid_circles):
+    #     xml_filenames.append(constraints.design_to_xml_v2(valid_design, nprods_top, df_PressureRods, df_Standoffs, root, inputfile, gen, i))
+    #     # xml_filenames.append(constraints.design_to_xml_v2(valid_design, df_PressureRods, root, inputfile, gen, i))
         
     print("Running FEA")
     
     # # Straight calculation version
-    # results_mp = [constraints.runFEA_valid_circles_v2(valid_circles[i], df_PressureRods, df_Standoffs, root, inputfile, gen, i) for i in range(pop.shape[0])]
+    # results_mp = [constraints.runFEA_valid_circles_v2(valid_circles[i], tip_radii[i], drill_radii[i], top_radii[i], nprods_top, df_PressureRods, df_Standoffs, root, inputfile, gen, i) for i in range(pop.shape[0])]
     
     # Multiprocessing version
     pool = multiprocessing.Pool(processes=ncpus)
     # arg_tuples = [(xml_filenames[i]) for i in range(pop.shape[0])]
-    arg_tuples = [(valid_circles[i], nprods_top, df_PressureRods, df_Standoffs, root, inputfile, gen, i) for i in range(pop.shape[0])]
+    arg_tuples = [(valid_circles[i], tip_radii[i], drill_radii[i], top_radii[i], nprods_top, df_PressureRods, df_Standoffs, root, inputfile, gen, i) for i in range(pop.shape[0])]
     # arg_tuples = [(valid_circles[i], df_PressureRods, root, xml_filenames[i], gen, i) for i in range(pop.shape[0])]
     # results_mp = pool.starmap(constraints.runFEA_new_path, arg_tuples)
     results_mp = pool.starmap(constraints.runFEA_valid_circles_v2, arg_tuples)
@@ -923,15 +934,33 @@ def evaluation(pop, nobjs, gen, nprods_top, nprods_bot, inputfile, constraint_ge
                     if not os.path.exists(meshnodes_file):
                         missing_iterations.append(i)
                     break  # Exit the loop after the first successful folder
-    
-        for i in missing_iterations:
-            print(f"Rerun of FEA_GEN{gen}_ITER{i}")
-            exit_code = constraints.runFEA_valid_circles(valid_circles[i], df_PressureRods, df_BoardStops, root, inputfile, gen, i)
-            # exit_code = constraints.runFEA_valid_circles(valid_circles[i], df_PressureRods, root, inputfile, gen, i)
-            successful.append(exit_code)
-            
-        if all(element == 0 for element in successful):
-            break
+        
+        # If there are any failed FEA cases, generate new designs and run those
+        if missing_iterations:
+            new_initial_population = constraints.initialize_population_simple_v3(len(missing_iterations), nprods_top, nprods_bot, top_constraints, bot_constraints, all_on, on_prob, rod_type)
+            for ind, i in enumerate(missing_iterations):
+                chromosome_temp = new_initial_population[ind]
+                prods_temp = constraints.interpret_chromosome_to_prods_v2(chromosome_temp, nprods_top, nprods_bot)
+                valid_circles_temp = constraints.prods_to_valid_circles(prods_temp)
+                tip_radii_temp = constraints.prods_to_tip_radii(prods_temp)
+                drill_radii_temp = constraints.prods_to_drill_radii(prods_temp)
+                top_radii_temp = constraints.prods_to_top_radii(prods_temp)
+                
+                print(f"Regeneration of FEA_GEN{gen}_ITER{i}")
+                exit_code = constraints.runFEA_valid_circles_v2(valid_circles_temp, tip_radii_temp, drill_radii_temp, top_radii_temp, nprods_top, df_PressureRods, df_BoardStops, root, inputfile, gen, i)
+                # if successful, replace that design in pop with the new one
+                if exit_code == 0:
+                    pop[i] = chromosome_temp
+                # exit_code = constraints.runFEA_valid_circles(valid_circles[i], df_PressureRods, root, inputfile, gen, i)
+                successful.append(exit_code)
+                
+                # print(f"Rerun of FEA_GEN{gen}_ITER{i}")
+                # exit_code = constraints.runFEA_valid_circles_v2(valid_circles[i], tip_radii[i], drill_radii[i], top_radii[i], nprods_top, df_PressureRods, df_BoardStops, root, inputfile, gen, i)
+                # # exit_code = constraints.runFEA_valid_circles(valid_circles[i], df_PressureRods, root, inputfile, gen, i)
+                # successful.append(exit_code)
+                
+            if all(element == 0 for element in successful):
+                break
     
         # If there are no missing iterations, exit the loop
         if not missing_iterations:
@@ -1203,12 +1232,12 @@ def main_optimization():
     
     # Parameters
     print("Setting genetic algorithm parameters")
-    pop_size = 5              # initial number of chromosomes
-    rate_crossover = 1         # number of chromosomes that we apply crossover to
-    rate_mutation = 1         # number of chromosomes that we apply mutation to
-    chance_mutation = 0.2       # normalized percent chance that an individual pressure rod will be mutated
-    n_searched = 1              # number of chromosomes that we apply local_search to
-    chance_localsearch = 0.2
+    pop_size = 30              # initial number of chromosomes
+    rate_crossover = 10         # number of chromosomes that we apply crossover to
+    rate_mutation = 10         # number of chromosomes that we apply mutation to
+    chance_mutation = 0.3       # normalized percent chance that an individual pressure rod will be mutated
+    n_searched = 10              # number of chromosomes that we apply local_search to
+    chance_localsearch = 0.3
     on_prob_initial = 0.5   # Initial percentage chance that a pressure rod will be on (only in the initial population)
     on_prob = 0.8           # Likelihood an "off" pressure rod will be switched on
     perturbrate = 1.0
@@ -1222,7 +1251,7 @@ def main_optimization():
     
     nprods = 64
     nprods_top = 64
-    nstandoffs = 10
+    nstandoffs = 6
     print(f"nprods_small = {nprods_small}")
     print(f"nprods_large = {nprods_large}")
     nprods_top_input = input(f"Current nprods_top: {nprods_top}\n If this quantity is adequate press enter. Otherwise choose an integer value and press enter.\n")
@@ -1270,7 +1299,7 @@ def main_optimization():
         pop = np.append(pop, offspring_from_local_search, axis=0)
         
         print("Evaluating fitnesses...")
-        fitness_values = evaluation(pop, nobjs, i, nprods_top, nstandoffs, inputfile, constraint_geom)
+        fitness_values = evaluation(pop, nobjs, i, nprods_top, nstandoffs, inputfile, constraint_geom, all_on, on_prob, rod_type)
         # fitness_values = evaluation(pop, nobjs, i, nprods, inputfile, constraint_geom)
         fitness_values_temp = copy.deepcopy(fitness_values)
         genvals = i*np.ones((fitness_values_temp.shape[0],1))
@@ -1371,7 +1400,7 @@ def main_optimization():
     
     
     # Pareto front visualization
-    fitness_values = evaluation(pop, nobjs, i, nprods_top, nstandoffs, inputfile, constraint_geom)
+    fitness_values = evaluation(pop, nobjs, i, nprods_top, nstandoffs, inputfile, constraint_geom, all_on, on_prob, rod_type)
     index = np.arange(pop.shape[0]).astype(int)
     pareto_front_index = pareto_front_finding(fitness_values, index)
     pop = pop[pareto_front_index, :]
