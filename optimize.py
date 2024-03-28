@@ -919,21 +919,7 @@ def evaluation(pop, nobjs, gen, nprods_top, nprods_bot, inputfile, constraint_ge
         # Get directory to search for output
         path, filename = os.path.split(inputfile)
         output_dir = os.path.join(path, "Output")
-        missing_iterations = []
-        successful = []
-        for i in range(pop.shape[0]):
-            # Check if a results file has been created for each iteration in the
-            # current generation since evaluation_start
-            output_substring = f"FEA_GEN{gen}_ITER{i}"
-            folders = [d for d in os.listdir(output_dir) if os.path.isdir(os.path.join(output_dir, d))]
-    
-            for folder in folders:
-                if output_substring in folder and is_folder_created_after_input_time(os.path.join(output_dir, folder), evaluation_start):
-                    # Check if FEA_MeshNodes.csv exists
-                    meshnodes_file = os.path.join(output_dir, folder, "FEA_MeshNodes.csv")
-                    if not os.path.exists(meshnodes_file):
-                        missing_iterations.append(i)
-                    break  # Exit the loop after the first successful folder
+        missing_iterations = list(np.where(results_mp)[0])
         
         # If there are any failed FEA cases, generate new designs and run those
         if missing_iterations:
@@ -952,19 +938,63 @@ def evaluation(pop, nobjs, gen, nprods_top, nprods_bot, inputfile, constraint_ge
                 if exit_code == 0:
                     pop[i] = chromosome_temp
                 # exit_code = constraints.runFEA_valid_circles(valid_circles[i], df_PressureRods, root, inputfile, gen, i)
-                successful.append(exit_code)
-                
-                # print(f"Rerun of FEA_GEN{gen}_ITER{i}")
-                # exit_code = constraints.runFEA_valid_circles_v2(valid_circles[i], tip_radii[i], drill_radii[i], top_radii[i], nprods_top, df_PressureRods, df_BoardStops, root, inputfile, gen, i)
-                # # exit_code = constraints.runFEA_valid_circles(valid_circles[i], df_PressureRods, root, inputfile, gen, i)
-                # successful.append(exit_code)
-                
-            if all(element == 0 for element in successful):
-                break
+                results_mp[i] = exit_code
     
         # If there are no missing iterations, exit the loop
-        if not missing_iterations:
+        else:
             break
+        
+    # while True:
+    #     # Get directory to search for output
+    #     path, filename = os.path.split(inputfile)
+    #     output_dir = os.path.join(path, "Output")
+    #     missing_iterations = []
+    #     successful = []
+    #     for i in range(pop.shape[0]):
+    #         # Check if a results file has been created for each iteration in the
+    #         # current generation since evaluation_start
+    #         output_substring = f"FEA_GEN{gen}_ITER{i}"
+    #         folders = []
+    #         folders = [d for d in os.listdir(output_dir) if os.path.isdir(os.path.join(output_dir, d))]
+    
+    #         for folder in folders:
+    #             if output_substring in folder and is_folder_created_after_input_time(os.path.join(output_dir, folder), evaluation_start):
+    #                 # Check if FEA_MeshNodes.csv exists
+    #                 meshnodes_file = os.path.join(output_dir, folder, "FEA_MeshNodes.csv")
+    #                 if not os.path.exists(meshnodes_file):
+    #                     missing_iterations.append(i)
+    #                 break  # Exit the loop after the first successful folder
+        
+    #     # If there are any failed FEA cases, generate new designs and run those
+    #     if missing_iterations:
+    #         new_initial_population = constraints.initialize_population_simple_v3(len(missing_iterations), nprods_top, nprods_bot, top_constraints, bot_constraints, all_on, on_prob, rod_type)
+    #         for ind, i in enumerate(missing_iterations):
+    #             chromosome_temp = new_initial_population[ind]
+    #             prods_temp = constraints.interpret_chromosome_to_prods_v2(chromosome_temp, nprods_top, nprods_bot)
+    #             valid_circles_temp = constraints.prods_to_valid_circles(prods_temp)
+    #             tip_radii_temp = constraints.prods_to_tip_radii(prods_temp)
+    #             drill_radii_temp = constraints.prods_to_drill_radii(prods_temp)
+    #             top_radii_temp = constraints.prods_to_top_radii(prods_temp)
+                
+    #             print(f"Regeneration of FEA_GEN{gen}_ITER{i}")
+    #             exit_code = constraints.runFEA_valid_circles_v2(valid_circles_temp, tip_radii_temp, drill_radii_temp, top_radii_temp, nprods_top, df_PressureRods, df_BoardStops, root, inputfile, gen, i)
+    #             # if successful, replace that design in pop with the new one
+    #             if exit_code == 0:
+    #                 pop[i] = chromosome_temp
+    #             # exit_code = constraints.runFEA_valid_circles(valid_circles[i], df_PressureRods, root, inputfile, gen, i)
+    #             successful.append(exit_code)
+                
+    #             # print(f"Rerun of FEA_GEN{gen}_ITER{i}")
+    #             # exit_code = constraints.runFEA_valid_circles_v2(valid_circles[i], tip_radii[i], drill_radii[i], top_radii[i], nprods_top, df_PressureRods, df_BoardStops, root, inputfile, gen, i)
+    #             # # exit_code = constraints.runFEA_valid_circles(valid_circles[i], df_PressureRods, root, inputfile, gen, i)
+    #             # successful.append(exit_code)
+                
+    #         if all(element == 0 for element in successful):
+    #             break
+    
+    #     # If there are no missing iterations, exit the loop
+    #     if not missing_iterations:
+    #         break
     
     # while True:
     #     # Get directory to search for output
@@ -1243,7 +1273,7 @@ def main_optimization():
     perturbrate = 1.0
     maxmag = 0.1             # coordinate displacement during local_search
     typerate = 0.1
-    maximum_generation = 12    # number of iterations
+    maximum_generation = 15    # number of iterations
     nobjs = 5
     
     end_early = True
@@ -1251,7 +1281,7 @@ def main_optimization():
     
     nprods = 64
     nprods_top = 64
-    nstandoffs = 6
+    nstandoffs = 12
     print(f"nprods_small = {nprods_small}")
     print(f"nprods_large = {nprods_large}")
     nprods_top_input = input(f"Current nprods_top: {nprods_top}\n If this quantity is adequate press enter. Otherwise choose an integer value and press enter.\n")
