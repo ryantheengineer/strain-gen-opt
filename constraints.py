@@ -81,12 +81,11 @@ def get_constraint_geometry():
     df_Probes = get_point_geometry(root, "Probes")
     df_GuidePins = get_point_geometry(root, "GuidePins")
     df_PressureRods = get_point_geometry(root, "PressureRods")
-    df_BoardStops = get_point_geometry(root, "BottomPressureRods")
     df_Standoffs = get_point_geometry(root, "Standoffs")
     
     results = (root, inputfile, pBoards, pOutline, pShape, pComponentsTop,
                pComponentsBot, Pressure, I_Plate, Stripper, Probe, Countersink,
-               df_Probes, df_GuidePins, df_PressureRods, df_BoardStops, df_Standoffs)
+               df_Probes, df_GuidePins, df_PressureRods, df_Standoffs)
     return results
 
 
@@ -193,7 +192,7 @@ def get_point_geometry(root, identifier):
                 output_dict = {column_names[i]:columns[i] for i in range(len(column_names))}
                 df_output = pd.DataFrame(output_dict)
             else:
-                if identifier == "BottomPressureRods" or identifier == "PressureRods":
+                if identifier == "Standoffs" or identifier == "PressureRods":
                     column_names = ['unimplemented1','unimplemented2','unimplemented3',
                                     'unimplemented4','unimplemented5','unimplemented6',
                                     'x','y','unimplemented7','unimplemented8',
@@ -201,7 +200,7 @@ def get_point_geometry(root, identifier):
                                     'type','unimplemented12','unimplemented13','z','color']
                     df_output = pd.DataFrame(columns=column_names)
                 else:
-                    raise ValueError("An empty point dataframe was passed to constraints.get_point_geometry() that wasn't for board stops (bottom pressure rods) or top side pressure rods")
+                    raise ValueError("An empty point dataframe was passed to constraints.get_point_geometry() that wasn't for board stops (standoffs) or top side pressure rods")
 
     return df_output
 
@@ -2295,8 +2294,7 @@ if __name__ == "__main__":
     df_Probes = results[12]
     df_GuidePins = results[13]
     df_PressureRods = results[14]
-    df_BoardStops = results[15]
-    df_Standoffs = results[16]
+    df_Standoffs = results[15]
     
     fig, ax = plt.subplots(dpi=300, figsize=(10,8))
     ax.set_aspect('equal')

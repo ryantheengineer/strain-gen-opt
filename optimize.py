@@ -866,8 +866,7 @@ def evaluation(pop, nobjs, gen, nprods_top, nprods_bot, inputfile, constraint_ge
     df_Probes = constraint_geom[12]
     df_GuidePins = constraint_geom[13]
     df_PressureRods = constraint_geom[14]
-    df_BoardStops = constraint_geom[15]
-    df_Standoffs = constraint_geom[16]
+    df_Standoffs = constraint_geom[15]
     
     pBoards_diff_top = constraints.get_pBoards_diff_side(1, pBoards, pComponentsTop, I_Plate)
     pBoards_diff_bot = constraints.get_pBoards_diff_side(2, pBoards, pComponentsBot, I_Plate)
@@ -933,7 +932,7 @@ def evaluation(pop, nobjs, gen, nprods_top, nprods_bot, inputfile, constraint_ge
                 top_radii_temp = constraints.prods_to_top_radii(prods_temp)
                 
                 print(f"Regeneration of FEA_GEN{gen}_ITER{i}")
-                exit_code = constraints.runFEA_valid_circles_v2(valid_circles_temp, tip_radii_temp, drill_radii_temp, top_radii_temp, nprods_top, df_PressureRods, df_BoardStops, root, inputfile, gen, i)
+                exit_code = constraints.runFEA_valid_circles_v2(valid_circles_temp, tip_radii_temp, drill_radii_temp, top_radii_temp, nprods_top, df_PressureRods, df_Standoffs, root, inputfile, gen, i)
                 # if successful, replace that design in pop with the new one
                 if exit_code == 0:
                     pop[i] = chromosome_temp
@@ -1262,18 +1261,18 @@ def main_optimization():
     
     # Parameters
     print("Setting genetic algorithm parameters")
-    pop_size = 30              # initial number of chromosomes
-    rate_crossover = 10         # number of chromosomes that we apply crossover to
-    rate_mutation = 10         # number of chromosomes that we apply mutation to
-    chance_mutation = 0.3       # normalized percent chance that an individual pressure rod will be mutated
-    n_searched = 10              # number of chromosomes that we apply local_search to
-    chance_localsearch = 0.3
+    pop_size = 10              # initial number of chromosomes
+    rate_crossover = 2         # number of chromosomes that we apply crossover to
+    rate_mutation = 2         # number of chromosomes that we apply mutation to
+    chance_mutation = 0.2       # normalized percent chance that an individual pressure rod will be mutated
+    n_searched = 2              # number of chromosomes that we apply local_search to
+    chance_localsearch = 0.2
     on_prob_initial = 0.5   # Initial percentage chance that a pressure rod will be on (only in the initial population)
     on_prob = 0.8           # Likelihood an "off" pressure rod will be switched on
     perturbrate = 1.0
     maxmag = 0.1             # coordinate displacement during local_search
     typerate = 0.1
-    maximum_generation = 15    # number of iterations
+    maximum_generation = 4    # number of iterations
     nobjs = 5
     
     end_early = True
@@ -1434,15 +1433,7 @@ def main_optimization():
     index = np.arange(pop.shape[0]).astype(int)
     pareto_front_index = pareto_front_finding(fitness_values, index)
     pop = pop[pareto_front_index, :]
-    # print("_________________")
-    # print("Optimal solutions:")
-    # print("       x1               x2                 x3")
-    # print(pop) # show optimal solutions
     fitness_values = fitness_values[pareto_front_index]
-    # print("______________")
-    # print("Fitness values:")
-    # print("  objective 1    objective 2")
-    # print(fitness_values)
     best_fitnesses_1 = np.asarray(best_fitnesses_1)
     best_fitnesses_2 = np.asarray(best_fitnesses_2)
     best_fitnesses_3 = np.asarray(best_fitnesses_3)
