@@ -404,14 +404,21 @@ def check_available_perturb_simple(child_prod, top_constraints):
         closest_top_probes = nearest_points(child_prod.center, top_probes)
     else:
         closest_top_probes = np.nan
-    closest_top_components = nearest_points(child_prod.center, topcomponents)
+    if topcomponents:
+        closest_top_components = nearest_points(child_prod.center, topcomponents)
+    else:
+        closest_top_components = np.nan
     
     dist_pBoards_multi = closest_pBoards_multi[0].distance(closest_pBoards_multi[1])
     if top_probes:
         dist_top_probes = closest_top_probes[0].distance(closest_top_probes[1])
     else:
         dist_top_probes = np.nan
-    dist_top_components = closest_top_components[0].distance(closest_top_components[1])
+    
+    if isinstance(closest_top_components, tuple):
+        dist_top_components = closest_top_components[0].distance(closest_top_components[1])
+    else:
+        dist_top_components = np.nan
     
     # Find the shortest distance
     shortest_dist = min([dist_pBoards_multi, dist_top_probes, dist_top_components])
@@ -1261,18 +1268,18 @@ def main_optimization():
     
     # Parameters
     print("Setting genetic algorithm parameters")
-    pop_size = 10              # initial number of chromosomes
-    rate_crossover = 2         # number of chromosomes that we apply crossover to
-    rate_mutation = 2         # number of chromosomes that we apply mutation to
+    pop_size = 40              # initial number of chromosomes
+    rate_crossover = 13         # number of chromosomes that we apply crossover to
+    rate_mutation = 13         # number of chromosomes that we apply mutation to
     chance_mutation = 0.2       # normalized percent chance that an individual pressure rod will be mutated
-    n_searched = 2              # number of chromosomes that we apply local_search to
+    n_searched = 13              # number of chromosomes that we apply local_search to
     chance_localsearch = 0.2
     on_prob_initial = 0.5   # Initial percentage chance that a pressure rod will be on (only in the initial population)
     on_prob = 0.8           # Likelihood an "off" pressure rod will be switched on
     perturbrate = 1.0
     maxmag = 0.1             # coordinate displacement during local_search
     typerate = 0.1
-    maximum_generation = 4    # number of iterations
+    maximum_generation = 15    # number of iterations
     nobjs = 5
     
     end_early = True
@@ -1467,7 +1474,9 @@ def main_optimization():
 
     # Plot the fitness values in a plotly 3d plot
     fig = px.scatter_3d(df_fitness_values, x="Strain_xx", y="Strain_yy", z="Strain_xy",
-                        color=['rgb({},{},{})'.format(r,g,b) for r,g,b in zip(df_fitness_values.R.values, df_fitness_values.G.values, df_fitness_values.B.values)])
+                        color='Generation', color_continuous_scale='plasma')
+    # fig = px.scatter_3d(df_fitness_values, x="Strain_xx", y="Strain_yy", z="Strain_xy",
+    #                     color=['rgb({},{},{})'.format(r,g,b) for r,g,b in zip(df_fitness_values.R.values, df_fitness_values.G.values, df_fitness_values.B.values)])
     fig.show(renderer='browser')
     
     return fitness_values, best_fitnesses, pop

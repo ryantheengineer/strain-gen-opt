@@ -56,7 +56,8 @@ def runFEA(FEApath, inputfile):
     command = f'"{FEApath}" {args}'
     result = subprocess.run(command)
     if result.returncode == 0:
-        print(f"{inputfile} ran successfully")
+        # print(f"{inputfile} ran successfully")
+        pass
     else:
         print(f"{inputfile} failed with code {result.returncode}")
     return result.returncode
