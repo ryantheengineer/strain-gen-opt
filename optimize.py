@@ -51,7 +51,6 @@ def crossover_prods(pop, crossover_rate, nprods_top, nprods_bot, top_constraints
     print(f"Performing crossover to create {crossover_rate} child designs")
     offspring = np.zeros((crossover_rate, pop.shape[1]))
     for i in range(crossover_rate):
-        # print(f"Creating child {i} from crossover")
         # Crossover with complete pressure rods.
         complete = False
         while complete is False:
@@ -67,8 +66,6 @@ def crossover_prods(pop, crossover_rate, nprods_top, nprods_bot, top_constraints
             # Interpret each parent into PressureRod representation
             parent1_prods = constraints.interpret_chromosome_to_prods_v2(parent1, nprods_top, nprods_bot)
             parent2_prods = constraints.interpret_chromosome_to_prods_v2(parent2, nprods_top, nprods_bot)
-            # parent1_prods = constraints.interpret_chromosome_to_prods(parent1, nprods)
-            # parent2_prods = constraints.interpret_chromosome_to_prods(parent2, nprods)
             
             # Perform crossover on PressureRod representation, with the understanding
             # that both parents were previously validated against all constraints,
@@ -697,9 +694,6 @@ def local_search(pop, n_searched, localsearch_rate, on_prob, perturbrate, maxmag
                                         break
                                     else:
                                         break
-                                # else:
-                                #     valid = True
-                                #     break
                                 
                                 # If the perturbation is not valid, return the pressure rod to its original position and try again.
                                 if valid == False:
@@ -713,8 +707,6 @@ def local_search(pop, n_searched, localsearch_rate, on_prob, perturbrate, maxmag
                                         if printperturbs:
                                             print(f"UNSUCCESSFUL position perturb, MAX ATTEMPTS REACHED ({max_attempts}).\n")
                                         break
-                                # if valid == False:
-                                #     break
                                 
                                 if valid == True:
                                     if printperturbs:
@@ -811,7 +803,8 @@ def local_search(pop, n_searched, localsearch_rate, on_prob, perturbrate, maxmag
                     # print("\nNO PRESSURE RODS WERE CHANGED COMPARED TO THE PARENT DESIGN\n")
 
         # Interpret the child back to chromosome form
-        child_chromosome = constraints.interpret_prods_to_chromosome(child_prods)
+        child_chromosome  = constraints.interpret_prods_to_chromosome_v2(child_prods, nprods_top, nstandoffs)
+        # child_chromosome = constraints.interpret_prods_to_chromosome(child_prods)
         offspring[i, :] = child_chromosome
         
         # # Plot the parent and child designs for examination
@@ -854,7 +847,6 @@ def evaluation(pop, nobjs, gen, nprods_top, nprods_bot, inputfile, constraint_ge
         DESCRIPTION.
 
     """
-    # fitness_values = np.zeros((pop.shape[0], nobjs))
     evaluation_start = datetime.now()
     
     # Read in constraint_geom (output of constraints.get_constraint_geometry())
@@ -875,8 +867,8 @@ def evaluation(pop, nobjs, gen, nprods_top, nprods_bot, inputfile, constraint_ge
     df_PressureRods = constraint_geom[14]
     df_Standoffs = constraint_geom[15]
     
-    pBoards_diff_top = constraints.get_pBoards_diff_side(1, pBoards, pComponentsTop, I_Plate)
-    pBoards_diff_bot = constraints.get_pBoards_diff_side(2, pBoards, pComponentsBot, I_Plate)
+    pBoards_diff_top = constraints.get_pBoards_diff_side(1, pBoards, pComponentsTop, I_Plate, pShape)
+    pBoards_diff_bot = constraints.get_pBoards_diff_side(2, pBoards, pComponentsBot, I_Plate, pShape)
     top_constraints = constraints.get_board_constraints_single_side(pBoards, pComponentsTop, 1, df_Probes, pBoards_diff_top)
     bot_constraints = constraints.get_board_constraints_single_side(pBoards, pComponentsBot, 2, df_Probes, pBoards_diff_bot)
     
@@ -896,12 +888,6 @@ def evaluation(pop, nobjs, gen, nprods_top, nprods_bot, inputfile, constraint_ge
         drill_radii.append(constraints.prods_to_drill_radii(prods[i]))
         top_radii.append(constraints.prods_to_top_radii(prods[i]))
         
-    # # Generate the XML files sequentially
-    # xml_filenames = []
-    # for i, valid_design in enumerate(valid_circles):
-    #     xml_filenames.append(constraints.design_to_xml_v2(valid_design, nprods_top, df_PressureRods, df_Standoffs, root, inputfile, gen, i))
-    #     # xml_filenames.append(constraints.design_to_xml_v2(valid_design, df_PressureRods, root, inputfile, gen, i))
-        
     print("Running FEA")
     
     # # Straight calculation version
@@ -909,10 +895,7 @@ def evaluation(pop, nobjs, gen, nprods_top, nprods_bot, inputfile, constraint_ge
     
     # Multiprocessing version
     pool = multiprocessing.Pool(processes=ncpus)
-    # arg_tuples = [(xml_filenames[i]) for i in range(pop.shape[0])]
     arg_tuples = [(valid_circles[i], tip_radii[i], drill_radii[i], top_radii[i], nprods_top, df_PressureRods, df_Standoffs, root, inputfile, gen, i) for i in range(pop.shape[0])]
-    # arg_tuples = [(valid_circles[i], df_PressureRods, root, xml_filenames[i], gen, i) for i in range(pop.shape[0])]
-    # results_mp = pool.starmap(constraints.runFEA_new_path, arg_tuples)
     results_mp = pool.starmap(constraints.runFEA_valid_circles_v2, arg_tuples)
     pool.close()
     pool.join()
@@ -949,85 +932,6 @@ def evaluation(pop, nobjs, gen, nprods_top, nprods_bot, inputfile, constraint_ge
         # If there are no missing iterations, exit the loop
         else:
             break
-        
-    # while True:
-    #     # Get directory to search for output
-    #     path, filename = os.path.split(inputfile)
-    #     output_dir = os.path.join(path, "Output")
-    #     missing_iterations = []
-    #     successful = []
-    #     for i in range(pop.shape[0]):
-    #         # Check if a results file has been created for each iteration in the
-    #         # current generation since evaluation_start
-    #         output_substring = f"FEA_GEN{gen}_ITER{i}"
-    #         folders = []
-    #         folders = [d for d in os.listdir(output_dir) if os.path.isdir(os.path.join(output_dir, d))]
-    
-    #         for folder in folders:
-    #             if output_substring in folder and is_folder_created_after_input_time(os.path.join(output_dir, folder), evaluation_start):
-    #                 # Check if FEA_MeshNodes.csv exists
-    #                 meshnodes_file = os.path.join(output_dir, folder, "FEA_MeshNodes.csv")
-    #                 if not os.path.exists(meshnodes_file):
-    #                     missing_iterations.append(i)
-    #                 break  # Exit the loop after the first successful folder
-        
-    #     # If there are any failed FEA cases, generate new designs and run those
-    #     if missing_iterations:
-    #         new_initial_population = constraints.initialize_population_simple_v3(len(missing_iterations), nprods_top, nprods_bot, top_constraints, bot_constraints, all_on, on_prob, rod_type)
-    #         for ind, i in enumerate(missing_iterations):
-    #             chromosome_temp = new_initial_population[ind]
-    #             prods_temp = constraints.interpret_chromosome_to_prods_v2(chromosome_temp, nprods_top, nprods_bot)
-    #             valid_circles_temp = constraints.prods_to_valid_circles(prods_temp)
-    #             tip_radii_temp = constraints.prods_to_tip_radii(prods_temp)
-    #             drill_radii_temp = constraints.prods_to_drill_radii(prods_temp)
-    #             top_radii_temp = constraints.prods_to_top_radii(prods_temp)
-                
-    #             print(f"Regeneration of FEA_GEN{gen}_ITER{i}")
-    #             exit_code = constraints.runFEA_valid_circles_v2(valid_circles_temp, tip_radii_temp, drill_radii_temp, top_radii_temp, nprods_top, df_PressureRods, df_BoardStops, root, inputfile, gen, i)
-    #             # if successful, replace that design in pop with the new one
-    #             if exit_code == 0:
-    #                 pop[i] = chromosome_temp
-    #             # exit_code = constraints.runFEA_valid_circles(valid_circles[i], df_PressureRods, root, inputfile, gen, i)
-    #             successful.append(exit_code)
-                
-    #             # print(f"Rerun of FEA_GEN{gen}_ITER{i}")
-    #             # exit_code = constraints.runFEA_valid_circles_v2(valid_circles[i], tip_radii[i], drill_radii[i], top_radii[i], nprods_top, df_PressureRods, df_BoardStops, root, inputfile, gen, i)
-    #             # # exit_code = constraints.runFEA_valid_circles(valid_circles[i], df_PressureRods, root, inputfile, gen, i)
-    #             # successful.append(exit_code)
-                
-    #         if all(element == 0 for element in successful):
-    #             break
-    
-    #     # If there are no missing iterations, exit the loop
-    #     if not missing_iterations:
-    #         break
-    
-    # while True:
-    #     # Get directory to search for output
-    #     path, filename = os.path.split(inputfile)
-    #     output_dir = path + "/Output"
-    #     missing_iterations = []
-    #     for i in range(pop.shape[0]):
-    #         # Check if a results file has been created for each iteration in the
-    #         # current generation since evaluation_start
-    #         output_substring = f"FEA_GEN{gen}_ITER{i}"
-    #         latest_folder = runFEA.find_latest_folder_with_substring(output_dir, output_substring)
-    #         if is_folder_created_after_input_time(latest_folder, evaluation_start):
-    #             # Check if FEA_MeshNodes.csv exists
-    #             meshnodes_file = latest_folder + "/FEA_MeshNodes.csv"
-    #             if not os.path.exists(meshnodes_file):
-    #                 missing_iterations.append(i)
-                    
-    #         else:
-    #             raise Exception("FEA output folder found was not created after the current generation start time")
-        
-    #     for i in missing_iterations:
-    #         print(f"Rerun of FEA_GEN{gen}_ITER{i}")
-    #         constraints.runFEA_valid_circles(valid_circles[i], df_PressureRods, root, inputfile, gen, i)
-        
-    #     # If there are no missing iterations, exit the loop
-    #     if not missing_iterations:
-    #         break
     
     # Once all the FEA cases have been accounted for, retrieve results
     results = []
@@ -1257,29 +1161,27 @@ def main_optimization():
     
     # Estimate a number of pressure rods for the top side that would make sense
     # print("--- Estimating possible pressure rods ---")
-    pBoards_diff_top = constraints.get_pBoards_diff_side(1, pBoards, pComponentsTop, I_Plate)
-    pBoards_diff_bot = constraints.get_pBoards_diff_side(2, pBoards, pComponentsBot, I_Plate)
+    pBoards_diff_top = constraints.get_pBoards_diff_side(1, pBoards, pComponentsTop, I_Plate, pShape)
+    pBoards_diff_bot = constraints.get_pBoards_diff_side(2, pBoards, pComponentsBot, I_Plate, pShape)
     nprods_small, nprods_large = constraints.grid_nprods_v2(pBoards_diff_top) # FIXME: Need to make this consider bottom side pressure rods
-    # nprods_small, nprods_large, pBoards_diff = constraints.grid_nprods(pBoards,pComponentsTop) # FIXME: Need to make this consider bottom side pressure rods
     
-    # top_constraints = constraints.get_top_constraints(pBoards, pComponentsTop, df_Probes, pBoards_diff)
     top_constraints = constraints.get_board_constraints_single_side(pBoards, pComponentsTop, 1, df_Probes, pBoards_diff_top)
     bot_constraints = constraints.get_board_constraints_single_side(pBoards, pComponentsBot, 2, df_Probes, pBoards_diff_bot)
     
     # Parameters
     print("Setting genetic algorithm parameters")
-    pop_size = 40              # initial number of chromosomes
-    rate_crossover = 13         # number of chromosomes that we apply crossover to
-    rate_mutation = 13         # number of chromosomes that we apply mutation to
+    pop_size = 30              # initial number of chromosomes
+    rate_crossover = 10         # number of chromosomes that we apply crossover to
+    rate_mutation = 10         # number of chromosomes that we apply mutation to
     chance_mutation = 0.2       # normalized percent chance that an individual pressure rod will be mutated
-    n_searched = 13              # number of chromosomes that we apply local_search to
+    n_searched = 10             # number of chromosomes that we apply local_search to
     chance_localsearch = 0.2
     on_prob_initial = 0.5   # Initial percentage chance that a pressure rod will be on (only in the initial population)
     on_prob = 0.8           # Likelihood an "off" pressure rod will be switched on
     perturbrate = 1.0
     maxmag = 0.1             # coordinate displacement during local_search
     typerate = 0.1
-    maximum_generation = 15    # number of iterations
+    maximum_generation = 20    # number of iterations
     nobjs = 5
     
     end_early = True
@@ -1297,10 +1199,6 @@ def main_optimization():
     else:
         nprods_top = int(nprods_top_input)
         print(f"New value of {nprods_top} accepted.")
-    # nprods = 40
-    # nprods = nprods_small
-    # nprods = len(df_PressureRods)
-    # nprods = np.max([len(df_PressureRods), nprods_small, nprods_large])
     
     design_accepted = False     # Flag for deciding whether to end optimization early if criteria are met
     
@@ -1312,8 +1210,11 @@ def main_optimization():
     #              '3.325" Tapered',
     #              '3.325" Flat']
     pop = constraints.initialize_population_simple_v3(pop_size, nprods_top, nstandoffs, top_constraints, bot_constraints, all_on, on_prob, rod_type)    # initial parents population P
-    # pop = constraints.initialize_population_simple_v2(pop_size, nprods_top, nprods_bot, top_constraints, bot_constraints, all_on, on_prob, rod_type)    # initial parents population P
-    # pop = constraints.initialize_population_simple(pop_size, nprods, pBoards, pComponentsTop, df_Probes, pBoards_diff, all_on, on_prob_initial, rod_type)    # initial parents population P
+    
+    # # Plot the designs
+    # for chromosome in pop:
+    #     constraints.plot_chromosome(chromosome, top_constraints, bot_constraints, nprods_top, nstandoffs)
+        
     pop = np.asarray(pop)
     end_setup_time = time.time()
     
@@ -1358,8 +1259,6 @@ def main_optimization():
         for j in range(len(pop)):
             x1 = fitness_values[j][0]
             x2 = fitness_values[j][1]
-            # x1 = pop[j][0]
-            # x2 = pop[j][1]
             ax.scatter(x1,x2,marker='o',color='b')
         ax.set_xlabel('Strain_xx')
         ax.set_ylabel('Strain_yy')
@@ -1407,23 +1306,23 @@ def main_optimization():
     # 3D plot of optimization progression
     colnames = ["Strain_xx", "Strain_yy", "Strain_xy", "Principal_Strain_Min", "Principal_Strain_Max", "Generation"]
     df_fitness_values = pd.DataFrame(complete_fitness_values, columns=colnames)
-    # Add RGB values based on the generation
-    Rvals = list(np.linspace(0, 1, maximum_generation))
-    Gvals = list(np.zeros((maximum_generation)))
-    Bvals = list(np.linspace(1, 0, maximum_generation))
+    # # Add RGB values based on the generation
+    # Rvals = list(np.linspace(0, 1, maximum_generation))
+    # Gvals = list(np.zeros((maximum_generation)))
+    # Bvals = list(np.linspace(1, 0, maximum_generation))
     
-    R = []
-    G = []
-    B = []
-    for index, row in df_fitness_values.iterrows():
-        i = int(df_fitness_values.loc[index, "Generation"])
-        R.append(Rvals[i])
-        G.append(Gvals[i])
-        B.append(Bvals[i])
+    # R = []
+    # G = []
+    # B = []
+    # for index, row in df_fitness_values.iterrows():
+    #     i = int(df_fitness_values.loc[index, "Generation"])
+    #     R.append(Rvals[i])
+    #     G.append(Gvals[i])
+    #     B.append(Bvals[i])
         
-    df_fitness_values["R"] = R
-    df_fitness_values["G"] = G
-    df_fitness_values["B"] = B
+    # df_fitness_values["R"] = R
+    # df_fitness_values["G"] = G
+    # df_fitness_values["B"] = B
     
     
     # def get_rgb(row):
@@ -1475,11 +1374,9 @@ def main_optimization():
     # Plot the fitness values in a plotly 3d plot
     fig = px.scatter_3d(df_fitness_values, x="Strain_xx", y="Strain_yy", z="Strain_xy",
                         color='Generation', color_continuous_scale='plasma')
-    # fig = px.scatter_3d(df_fitness_values, x="Strain_xx", y="Strain_yy", z="Strain_xy",
-    #                     color=['rgb({},{},{})'.format(r,g,b) for r,g,b in zip(df_fitness_values.R.values, df_fitness_values.G.values, df_fitness_values.B.values)])
     fig.show(renderer='browser')
     
-    return fitness_values, best_fitnesses, pop
+    return fitness_values, best_fitnesses, pop, fig
 
 if __name__ == "__main__":
-    fitness_values, best_fitnesses, pop = main_optimization()
+    fitness_values, best_fitnesses, pop, fig = main_optimization()

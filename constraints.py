@@ -14,6 +14,7 @@ FROM THE XML DESIGN INPUT.
 from shapely.geometry import Point, Polygon, MultiPolygon
 from shapely.affinity import rotate, translate
 from shapely.strtree import STRtree
+from shapely import plotting
 # from shapely import buffer
 from shapely.ops import unary_union
 from shapely import intersection
@@ -103,7 +104,15 @@ def get_fixture_geometry(root, identifier):
     def verts_to_poly(polys, elem):
         vertices_elem = elem.findall('.//vertex')
         vertices = [vertex.text.split("|") for vertex in vertices_elem]
-        polys.append(Polygon(vertices))
+        # Create Polygon from vertices, adding checks for closed polygons and
+        # normalizing
+        poly_temp = Polygon(vertices)
+        if not poly_temp.exterior.is_closed:
+            poly_temp = close_polygon(poly_temp)
+        poly_temp = poly_temp.normalize()
+        if poly_temp.exterior.is_ccw:
+            raise Exception("Polygon not normalized successfully")
+        polys.append(poly_temp)
         
         
     if (fixture is None):
@@ -381,7 +390,7 @@ class PressureRod():
         self.prod_to_prod_buffer = place_circle(new_x, new_y, self.rtop + 0.025)
         self.on = new_on
         
-def get_pBoards_diff_side(sidenum, pBoards, pComponentsSide, I_Plate):
+def get_pBoards_diff_side(sidenum, pBoards, pComponentsSide, I_Plate, pShape):
     pBoards_diff = []
     if type(pBoards) is not list:
         print(f"pBoards is not a list. It is a {type(pBoards)}")
@@ -435,9 +444,71 @@ def get_pBoards_diff_side(sidenum, pBoards, pComponentsSide, I_Plate):
             else:
                 pBoards_diff_temp.extend([board])
         pBoards_diff = copy.deepcopy(pBoards_diff_temp)
+        
+    if pShape:
+        pBoards_diff = intersection(pShape, pBoards_diff)
+        
+        # Make sure no MultiPolygons end up in the final pBoards_diff
+        pBoards_diff_temp = []
+        for i,board in enumerate(pBoards_diff):
+            if board.geom_type == "MultiPolygon":
+                polys = list(board.geoms)
+                pBoards_diff_temp.extend(polys)
+            else:
+                pBoards_diff_temp.extend([board])
+        pBoards_diff = copy.deepcopy(pBoards_diff_temp)
     
     return pBoards_diff
-        
+
+def close_polygon(polygon):
+    """
+    Check if a Shapely Polygon is closed. If not, add the necessary point
+    at the end of its exterior ring to close it.
+
+    Parameters:
+        polygon (Polygon): The Shapely Polygon to be checked and closed if necessary.
+
+    Returns:
+        Polygon: The closed Polygon.
+    """
+    # Check if the polygon's exterior ring is closed
+    if not polygon.exterior.is_closed:
+        # Add the starting point at the end to close the polygon
+        exterior_coords = list(polygon.exterior.coords)
+        exterior_coords.append(exterior_coords[0])
+        # Create a new closed polygon with the corrected exterior ring
+        closed_polygon = Polygon(exterior_coords)
+        return closed_polygon
+    else:
+        # If the polygon is already closed, return it as is
+        return polygon
+
+# def get_loop_area(points):
+#     signedArea = 0
+#     for i,point in enumerate(points):
+#         x1 = point[0]
+#         y1 = point[1]
+#         if i == len(points)-1:
+#             x2 = points[0][0]
+#             y2 = points[0][1]
+#         else:
+#             x2 = points[i+1][0]
+#             y2 = points[i+1][1]
+    
+#         signedArea += (x1 * y2 - x2 * y1)
+#     return signedArea / 2
+
+# def check_positive_loop(points):
+#     A = get_loop_area(points)
+#     if A > 0:
+#         return True
+#     else:
+#         return False
+    
+# def reverse_loop(points):
+#     points.reverse()
+
+
 def grid_nprods(pBoards, pComponentsTop):
     ### Randomly place pressure rod circles on top side of board ###
     # Add buffers around components and edge of boards
@@ -550,546 +621,546 @@ def grid_nprods_v2(pBoards_diff):
     return nprods_small, nprods_large
 
 
-def create_chromosome(nprods, pBoards, pComponentsTop, df_Probes, pBoards_diff, all_on=False, on_prob=0.5, rod_type="All"):
-    # Initialize random chromosome, where the first ncircles entries are
-    # the x coordinates, the next ncircles entries are y coordinates, then
-    # radii, and on/off binary values
+# def create_chromosome(nprods, pBoards, pComponentsTop, df_Probes, pBoards_diff, all_on=False, on_prob=0.5, rod_type="All"):
+#     # Initialize random chromosome, where the first ncircles entries are
+#     # the x coordinates, the next ncircles entries are y coordinates, then
+#     # radii, and on/off binary values
     
-    # Get pBoards as a MultiPolygon so pressure rods can be placed
-    # anywhere within the UUT grid
-    pBoards_multi = MultiPolygon(pBoards_diff)
+#     # Get pBoards as a MultiPolygon so pressure rods can be placed
+#     # anywhere within the UUT grid
+#     pBoards_multi = MultiPolygon(pBoards_diff)
     
-    df_Probes_top = df_Probes[df_Probes["side"]==1]
-    df_Probes_top.reset_index(inplace=True)
-    top_probes = []
-    for i,row in df_Probes_top.iterrows():
-        top_probes.append(place_circle(row.x, row.y, row.diameter/2))
+#     df_Probes_top = df_Probes[df_Probes["side"]==1]
+#     df_Probes_top.reset_index(inplace=True)
+#     top_probes = []
+#     for i,row in df_Probes_top.iterrows():
+#         top_probes.append(place_circle(row.x, row.y, row.diameter/2))
         
-    top_probes = unary_union(top_probes)
-    if top_probes.geom_type != "MultiPolygon":
-        top_probes = MultiPolygon(top_probes)
+#     top_probes = unary_union(top_probes)
+#     if top_probes.geom_type != "MultiPolygon":
+#         top_probes = MultiPolygon(top_probes)
     
-    topcomponents = []
-    for inner in pComponentsTop:
-        topcomponents.append(inner)
+#     topcomponents = []
+#     for inner in pComponentsTop:
+#         topcomponents.append(inner)
     
-    topcomponents = unary_union(topcomponents)
-    if topcomponents.geom_type != "MultiPolygon":
-        topcomponents = MultiPolygon(topcomponents)
+#     topcomponents = unary_union(topcomponents)
+#     if topcomponents.geom_type != "MultiPolygon":
+#         topcomponents = MultiPolygon(topcomponents)
     
-    xmin, ymin, xmax, ymax = pBoards_multi.bounds
-    rod_types = ['Press-Fit Tapered',
-                 'Press-Fit Flat',
-                 '3.325" Tapered',
-                 '3.325" Flat']
+#     xmin, ymin, xmax, ymax = pBoards_multi.bounds
+#     rod_types = ['Press-Fit Tapered',
+#                  'Press-Fit Flat',
+#                  '3.325" Tapered',
+#                  '3.325" Flat']
     
-    chromosome_x = []
-    chromosome_y = []
-    chromosome_rod_type = []
-    chromosome_on = []
-    prods_chosen = []
-    tries = 10
+#     chromosome_x = []
+#     chromosome_y = []
+#     chromosome_rod_type = []
+#     chromosome_on = []
+#     prods_chosen = []
+#     tries = 10
     
-    while len(chromosome_x) < nprods:
-        valid = True
-        x = random.uniform(xmin,xmax)
-        y = random.uniform(ymin,ymax)
-        if rod_type not in rod_types:
-            rod_type_i = random.randint(0,3)
-        else:
-            rod_type_i = rod_types.index(rod_type)
-        if all_on:
-            on = 1
-        else:
-            # on_prob = 0.5   # Percentage chance of a pressure rod being on initially
-            on_chance = random.uniform(0,1)
-            if on_prob >= on_chance:
-                on = 1
-            else:
-                on = 0
-            # on = random.randint(0,1)
-        prod = PressureRod(x,y,rod_types[rod_type_i],on)
-        intersects_topcomponents = False
-        intersects_topprobes = False
-        centroids = []
-        perturbing = False
+#     while len(chromosome_x) < nprods:
+#         valid = True
+#         x = random.uniform(xmin,xmax)
+#         y = random.uniform(ymin,ymax)
+#         if rod_type not in rod_types:
+#             rod_type_i = random.randint(0,3)
+#         else:
+#             rod_type_i = rod_types.index(rod_type)
+#         if all_on:
+#             on = 1
+#         else:
+#             # on_prob = 0.5   # Percentage chance of a pressure rod being on initially
+#             on_chance = random.uniform(0,1)
+#             if on_prob >= on_chance:
+#                 on = 1
+#             else:
+#                 on = 0
+#             # on = random.randint(0,1)
+#         prod = PressureRod(x,y,rod_types[rod_type_i],on)
+#         intersects_topcomponents = False
+#         intersects_topprobes = False
+#         centroids = []
+#         perturbing = False
         
-        # Make sure pressure rod is within the UUT and make sure it doesn't intersect any components, using the appropriate buffer sizes
-        if not prod.center.intersects(pBoards_multi):
-            continue
-        # if not prod.center.within(pBoards_multi):
-        #     continue
+#         # Make sure pressure rod is within the UUT and make sure it doesn't intersect any components, using the appropriate buffer sizes
+#         if not prod.center.intersects(pBoards_multi):
+#             continue
+#         # if not prod.center.within(pBoards_multi):
+#         #     continue
         
-        ### TRYING MOVING AWAY FROM INTERSECTION VIOLATIONS TO SALVAGE DESIGN ###
-        # Gather status of currently placed prod
-        if prod.tip_component_buffer.intersects(topcomponents):
-            intersects_topcomponents = True
-            intersection_topcomponents = prod.tip_component_buffer.intersection(topcomponents)
+#         ### TRYING MOVING AWAY FROM INTERSECTION VIOLATIONS TO SALVAGE DESIGN ###
+#         # Gather status of currently placed prod
+#         if prod.tip_component_buffer.intersects(topcomponents):
+#             intersects_topcomponents = True
+#             intersection_topcomponents = prod.tip_component_buffer.intersection(topcomponents)
             
-        if prod.tip_from_top_probe_buffer.intersects(top_probes):
-            intersects_topprobes = True
-            intersection_topprobes = prod.tip_from_top_probe_buffer.intersection(top_probes)
+#         if prod.tip_from_top_probe_buffer.intersects(top_probes):
+#             intersects_topprobes = True
+#             intersection_topprobes = prod.tip_from_top_probe_buffer.intersection(top_probes)
         
-        # Parse the status of intersections
-        if not intersects_topcomponents and not intersects_topprobes:
-            pass
-        elif intersects_topcomponents and not intersects_topprobes:
-            perturbing = True
-            if intersection_topcomponents.geom_type == "Polygon":
-                centroids.append(intersection_topcomponents.centroid)
-            else:
-                for poly in intersection_topcomponents.geoms:
-                    centroids.append(poly.centroid)
-        elif not intersects_topcomponents and intersects_topprobes:
-            perturbing = True
-            if intersection_topprobes.geom_type == "Polygon":
-                centroids.append(intersection_topprobes.centroid)
-            else:
-                for poly in intersection_topprobes.geoms:
-                    centroids.append(poly.centroid)                    
-        else:
-            perturbing = True
-            # both top components and top probes are intersected by the current prod
-            if intersection_topcomponents.geom_type == "Polygon":
-                centroids.append(intersection_topcomponents.centroid)
-            else:
-                for poly in intersection_topcomponents.geoms:
-                    centroids.append(poly.centroid)
+#         # Parse the status of intersections
+#         if not intersects_topcomponents and not intersects_topprobes:
+#             pass
+#         elif intersects_topcomponents and not intersects_topprobes:
+#             perturbing = True
+#             if intersection_topcomponents.geom_type == "Polygon":
+#                 centroids.append(intersection_topcomponents.centroid)
+#             else:
+#                 for poly in intersection_topcomponents.geoms:
+#                     centroids.append(poly.centroid)
+#         elif not intersects_topcomponents and intersects_topprobes:
+#             perturbing = True
+#             if intersection_topprobes.geom_type == "Polygon":
+#                 centroids.append(intersection_topprobes.centroid)
+#             else:
+#                 for poly in intersection_topprobes.geoms:
+#                     centroids.append(poly.centroid)                    
+#         else:
+#             perturbing = True
+#             # both top components and top probes are intersected by the current prod
+#             if intersection_topcomponents.geom_type == "Polygon":
+#                 centroids.append(intersection_topcomponents.centroid)
+#             else:
+#                 for poly in intersection_topcomponents.geoms:
+#                     centroids.append(poly.centroid)
                     
-            if intersection_topprobes.geom_type == "Polygon":
-                centroids.append(intersection_topprobes.centroid)
-            else:
-                for poly in intersection_topprobes.geoms:
-                    centroids.append(poly.centroid)
+#             if intersection_topprobes.geom_type == "Polygon":
+#                 centroids.append(intersection_topprobes.centroid)
+#             else:
+#                 for poly in intersection_topprobes.geoms:
+#                     centroids.append(poly.centroid)
         
-        if perturbing:                    
-            centroids_x = [centroid.x for centroid in centroids]
-            centroids_y = [centroid.y for centroid in centroids]
+#         if perturbing:                    
+#             centroids_x = [centroid.x for centroid in centroids]
+#             centroids_y = [centroid.y for centroid in centroids]
             
-            avg_x = np.mean(centroids_x)
-            avg_y = np.mean(centroids_y)
+#             avg_x = np.mean(centroids_x)
+#             avg_y = np.mean(centroids_y)
             
-            diff_x = prod.x - avg_x
-            diff_y = prod.y - avg_y
+#             diff_x = prod.x - avg_x
+#             diff_y = prod.y - avg_y
             
-            mag_diff = np.sqrt(diff_x**2 + diff_y**2)
+#             mag_diff = np.sqrt(diff_x**2 + diff_y**2)
             
-            unit_x = diff_x / mag_diff
-            unit_y = diff_y / mag_diff
+#             unit_x = diff_x / mag_diff
+#             unit_y = diff_y / mag_diff
             
-            # print("")
-            # print("-"*60)
-            # print("PERTURBING PROD AWAY FROM INTERSECTION")
+#             # print("")
+#             # print("-"*60)
+#             # print("PERTURBING PROD AWAY FROM INTERSECTION")
             
-            for i in range(tries):
-                valid = True
-                prodxmin, prodymin, prodxmax, prodymax = prod.tip_component_buffer.bounds
-                stepsize = (prodxmax - prodxmin)/tries
-                new_x = prod.x + unit_x*stepsize
-                new_y = prod.y + unit_y*stepsize
+#             for i in range(tries):
+#                 valid = True
+#                 prodxmin, prodymin, prodxmax, prodymax = prod.tip_component_buffer.bounds
+#                 stepsize = (prodxmax - prodxmin)/tries
+#                 new_x = prod.x + unit_x*stepsize
+#                 new_y = prod.y + unit_y*stepsize
                 
-                prod.update_pressure_rod(new_x, new_y, prod.rod_type, prod.on)
+#                 prod.update_pressure_rod(new_x, new_y, prod.rod_type, prod.on)
                 
-                topcomponent_intersection_area = prod.tip_component_buffer.intersection(topcomponents).area
-                top_probe_intersection_area = prod.tip_from_top_probe_buffer.intersection(top_probes).area
+#                 topcomponent_intersection_area = prod.tip_component_buffer.intersection(topcomponents).area
+#                 top_probe_intersection_area = prod.tip_from_top_probe_buffer.intersection(top_probes).area
                 
-                # print(f"\n{topcomponent_intersection_area} intersection with top components")
-                # print(f"{top_probe_intersection_area} intersection with top probes")
+#                 # print(f"\n{topcomponent_intersection_area} intersection with top components")
+#                 # print(f"{top_probe_intersection_area} intersection with top probes")
                 
-                if not prod.center.intersects(pBoards_multi):
-                    valid = False
-                    continue                
-                if prod.tip_component_buffer.intersects(topcomponents):
-                    valid = False
-                    continue
-                if prod.tip_from_top_probe_buffer.intersects(top_probes):
-                    valid = False
-                    continue
+#                 if not prod.center.intersects(pBoards_multi):
+#                     valid = False
+#                     continue                
+#                 if prod.tip_component_buffer.intersects(topcomponents):
+#                     valid = False
+#                     continue
+#                 if prod.tip_from_top_probe_buffer.intersects(top_probes):
+#                     valid = False
+#                     continue
                 
-                if valid == True:
-                    break
+#                 if valid == True:
+#                     break
                 
-        if not prod.center.intersects(pBoards_multi):
-            valid = False
-            continue
+#         if not prod.center.intersects(pBoards_multi):
+#             valid = False
+#             continue
             
         
         
-        # ## END NEW CODE ###
+#         # ## END NEW CODE ###
         
-        # # ## ORIGINAL CODE ###
-        # if prod.tip_component_buffer.intersects(topcomponents):
-        #     continue
+#         # # ## ORIGINAL CODE ###
+#         # if prod.tip_component_buffer.intersects(topcomponents):
+#         #     continue
         
-        # # Make sure the pressure rod isn't too close to any top probes
-        # if prod.tip_from_top_probe_buffer.intersects(top_probes):
-        #     continue
+#         # # Make sure the pressure rod isn't too close to any top probes
+#         # if prod.tip_from_top_probe_buffer.intersects(top_probes):
+#         #     continue
             
-        # Make sure pressure rod doesn't conflict with any previously-placed pressure rods
-        if len(prods_chosen) > 0:
-            for prod_chosen in prods_chosen:
-                if prod_chosen.top.intersects(prod.top_from_top_probe_buffer):
-                    valid = False
-                    break
-                # dist = centroid_distance(prod.tip,prod_chosen.tip)
-                # if dist < prod.ctc:
-                #     valid = False
-                #     break
-            if valid == False:
-                continue
-        ### END ORIGINAL CODE ###
+#         # Make sure pressure rod doesn't conflict with any previously-placed pressure rods
+#         if len(prods_chosen) > 0:
+#             for prod_chosen in prods_chosen:
+#                 if prod_chosen.top.intersects(prod.top_from_top_probe_buffer):
+#                     valid = False
+#                     break
+#                 # dist = centroid_distance(prod.tip,prod_chosen.tip)
+#                 # if dist < prod.ctc:
+#                 #     valid = False
+#                 #     break
+#             if valid == False:
+#                 continue
+#         ### END ORIGINAL CODE ###
         
-        if valid == True:
-            prods_chosen.append(prod)
-            chromosome_x.append(prod.x)
-            chromosome_y.append(prod.y)
-            chromosome_rod_type.append(rod_type_i)
-            chromosome_on.append(on)
+#         if valid == True:
+#             prods_chosen.append(prod)
+#             chromosome_x.append(prod.x)
+#             chromosome_y.append(prod.y)
+#             chromosome_rod_type.append(rod_type_i)
+#             chromosome_on.append(on)
             
-    chromosome = []
-    chromosome.extend(chromosome_x)
-    chromosome.extend(chromosome_y)
-    chromosome.extend(chromosome_rod_type)
-    chromosome.extend(chromosome_on)
+#     chromosome = []
+#     chromosome.extend(chromosome_x)
+#     chromosome.extend(chromosome_y)
+#     chromosome.extend(chromosome_rod_type)
+#     chromosome.extend(chromosome_on)
 
-    return chromosome
+#     return chromosome
 
-def create_chromosome_v2(nprods_top, nprods_bot, top_constraints, bot_constraints, all_on=False, on_prob=0.5, rod_type="All"):
-    # Initialize random chromosome, where the first ncircles entries are
-    # the x coordinates, the next ncircles entries are y coordinates, then
-    # radii, on/off binary values, and then the side of the board that the
-    # pressure rod is on (1 for top, 2 for bottom)
+# def create_chromosome_v2(nprods_top, nprods_bot, top_constraints, bot_constraints, all_on=False, on_prob=0.5, rod_type="All"):
+#     # Initialize random chromosome, where the first ncircles entries are
+#     # the x coordinates, the next ncircles entries are y coordinates, then
+#     # radii, on/off binary values, and then the side of the board that the
+#     # pressure rod is on (1 for top, 2 for bottom)
     
-    pBoards_multi = top_constraints[0]
-    top_probes = top_constraints[1]
-    topcomponents = top_constraints[2]
-    bot_probes = bot_constraints[1]
-    botcomponents = bot_constraints[2]
+#     pBoards_multi = top_constraints[0]
+#     top_probes = top_constraints[1]
+#     topcomponents = top_constraints[2]
+#     bot_probes = bot_constraints[1]
+#     botcomponents = bot_constraints[2]
     
-    xmin, ymin, xmax, ymax = pBoards_multi.bounds
-    rod_types = ['Press-Fit Tapered',
-                 'Press-Fit Flat',
-                 '3.325" Tapered',
-                 '3.325" Flat']
+#     xmin, ymin, xmax, ymax = pBoards_multi.bounds
+#     rod_types = ['Press-Fit Tapered',
+#                  'Press-Fit Flat',
+#                  '3.325" Tapered',
+#                  '3.325" Flat']
     
-    def build_grid(min_x, min_y, max_x, max_y, grid_size):
-        grid_cells = []
-        x = min_x
-        while x < max_x:
-            y = min_y
-            while y < max_y:
-                grid_cells.append({
-                    'min_x': x,
-                    'min_y': y,
-                    'max_x': x + grid_size,
-                    'max_y': y + grid_size
-                })
-                y += grid_size
-            x += grid_size
-        return grid_cells
+#     def build_grid(min_x, min_y, max_x, max_y, grid_size):
+#         grid_cells = []
+#         x = min_x
+#         while x < max_x:
+#             y = min_y
+#             while y < max_y:
+#                 grid_cells.append({
+#                     'min_x': x,
+#                     'min_y': y,
+#                     'max_x': x + grid_size,
+#                     'max_y': y + grid_size
+#                 })
+#                 y += grid_size
+#             x += grid_size
+#         return grid_cells
     
-    def get_grid_cell_poly(grid_cell):
-        # Need a way to check if the chosen grid cell is a good candidate for pressure rod placement
-        grid_cell_poly = Polygon([[grid_cell['min_x'], grid_cell['min_y']],
-                                  [grid_cell['min_x'], grid_cell['max_y']],
-                                  [grid_cell['max_x'], grid_cell['max_y']],
-                                  [grid_cell['max_x'], grid_cell['min_y']]])
-        return grid_cell_poly
+#     def get_grid_cell_poly(grid_cell):
+#         # Need a way to check if the chosen grid cell is a good candidate for pressure rod placement
+#         grid_cell_poly = Polygon([[grid_cell['min_x'], grid_cell['min_y']],
+#                                   [grid_cell['min_x'], grid_cell['max_y']],
+#                                   [grid_cell['max_x'], grid_cell['max_y']],
+#                                   [grid_cell['max_x'], grid_cell['min_y']]])
+#         return grid_cell_poly
     
-    def place_pressure_rods(nprods, sidenum, pBoards_multi, side_probes, sidecomponents):
-        chromosome_x = []
-        chromosome_y = []
-        chromosome_rod_type = []
-        chromosome_on = []
-        chromosome_side = []
-        prods_chosen = []
-        tries = 10
-        grid_tries = 10
+#     def place_pressure_rods(nprods, sidenum, pBoards_multi, side_probes, sidecomponents):
+#         chromosome_x = []
+#         chromosome_y = []
+#         chromosome_rod_type = []
+#         chromosome_on = []
+#         chromosome_side = []
+#         prods_chosen = []
+#         tries = 10
+#         grid_tries = 10
         
-        plotting = True
+#         plotting = True
         
-        # Add grid searching method
-        grid_size = 1.0
-        grid_cells = build_grid(xmin, ymin, xmax, ymax, grid_size)
+#         # Add grid searching method
+#         grid_size = 1.0
+#         grid_cells = build_grid(xmin, ymin, xmax, ymax, grid_size)
         
-        grid_cell_polys = [get_grid_cell_poly(grid_cell) for grid_cell in grid_cells]
+#         grid_cell_polys = [get_grid_cell_poly(grid_cell) for grid_cell in grid_cells]
         
-        search_by_subpoly_flag = False
-        use_subpolys = []
-        min_area = 0.1
-        max_pBoard_poly = max(list(pBoards_multi.geoms), key=lambda part: part.area)
-        if max_pBoard_poly.area < grid_size **2:
-            search_by_subpoly_flag = True
-            for poly in list(pBoards_multi.geoms):
-                if poly.area >= min_area:
-                    use_subpolys.append(poly)
+#         search_by_subpoly_flag = False
+#         use_subpolys = []
+#         min_area = 0.1
+#         max_pBoard_poly = max(list(pBoards_multi.geoms), key=lambda part: part.area)
+#         if max_pBoard_poly.area < grid_size **2:
+#             search_by_subpoly_flag = True
+#             for poly in list(pBoards_multi.geoms):
+#                 if poly.area >= min_area:
+#                     use_subpolys.append(poly)
         
         
-        if not search_by_subpoly_flag:
-            grid_cell_intersections_max_area = []
-            grid_cell_intersections_total_area = []
+#         if not search_by_subpoly_flag:
+#             grid_cell_intersections_max_area = []
+#             grid_cell_intersections_total_area = []
             
-            for i, grid_cell_poly in enumerate(grid_cell_polys):
-                overlap_area = grid_cell_poly.intersection(pBoards_multi).area
-                grid_cell_intersections_total_area.append(overlap_area)
+#             for i, grid_cell_poly in enumerate(grid_cell_polys):
+#                 overlap_area = grid_cell_poly.intersection(pBoards_multi).area
+#                 grid_cell_intersections_total_area.append(overlap_area)
                 
-                max_area_poly = max(list(pBoards_multi.geoms), key=lambda poly: poly.area, default=None)
-                max_area = max_area_poly.area if max_area_poly else 0.0
-                grid_cell_intersections_max_area.append(max_area)
+#                 max_area_poly = max(list(pBoards_multi.geoms), key=lambda poly: poly.area, default=None)
+#                 max_area = max_area_poly.area if max_area_poly else 0.0
+#                 grid_cell_intersections_max_area.append(max_area)
                 
-            # Raise error if no grid cells have a max contiguous area of > 0.0081 or a total available area of greater than 0.02
-            if any(element > 0.0081 for element in grid_cell_intersections_max_area) or any(element >= 0.02 for element in grid_cell_intersections_total_area):
-                pass
-            else:
-                raise Exception("No grid cell found with acceptable available area")
+#             # Raise error if no grid cells have a max contiguous area of > 0.0081 or a total available area of greater than 0.02
+#             if any(element > 0.0081 for element in grid_cell_intersections_max_area) or any(element >= 0.02 for element in grid_cell_intersections_total_area):
+#                 pass
+#             else:
+#                 raise Exception("No grid cell found with acceptable available area")
         
-        while len(chromosome_x) < nprods: # FIXME: 
-            valid = True
-            # x = random.uniform(xmin,xmax)
-            # y = random.uniform(ymin,ymax)
+#         while len(chromosome_x) < nprods: # FIXME: 
+#             valid = True
+#             # x = random.uniform(xmin,xmax)
+#             # y = random.uniform(ymin,ymax)
             
-            if not search_by_subpoly_flag:
-                # Search a smaller area of the board
-                i = random.choice(range(len(grid_cells)))
-                # If the total available placement area is not more than 2 times
-                # the diameter of the smallest prod, and the max individual area
-                # is not more than a square with sides equal to the diameter of the
-                # smallest prod, then don't look here.
-                if grid_cell_intersections_total_area[i] >= 0.02 and grid_cell_intersections_max_area[i] > 0.0081:
-                    pass
-                else:
-                    continue
+#             if not search_by_subpoly_flag:
+#                 # Search a smaller area of the board
+#                 i = random.choice(range(len(grid_cells)))
+#                 # If the total available placement area is not more than 2 times
+#                 # the diameter of the smallest prod, and the max individual area
+#                 # is not more than a square with sides equal to the diameter of the
+#                 # smallest prod, then don't look here.
+#                 if grid_cell_intersections_total_area[i] >= 0.02 and grid_cell_intersections_max_area[i] > 0.0081:
+#                     pass
+#                 else:
+#                     continue
                 
-                grid_cell = grid_cells[i]
+#                 grid_cell = grid_cells[i]
                 
-                grid_try_count = 0
-                while grid_try_count < grid_tries:
-                    x = random.uniform(grid_cell['min_x'], grid_cell['max_x'])
-                    y = random.uniform(grid_cell['min_y'], grid_cell['max_y'])
-                    pt = Point(x,y)
+#                 grid_try_count = 0
+#                 while grid_try_count < grid_tries:
+#                     x = random.uniform(grid_cell['min_x'], grid_cell['max_x'])
+#                     y = random.uniform(grid_cell['min_y'], grid_cell['max_y'])
+#                     pt = Point(x,y)
                     
-                    # ##### Plot for visual verification (can comment this out during final runs ##### 
-                    # print(f"search_by_subpoly_flag = {search_by_subpoly_flag}")
-                    if plotting:
-                        fig, ax = plt.subplots(dpi=300, figsize=(10,8))
-                        ax.set_aspect('equal')
-                        plot_poly_list_w_holes(grid_cell_polys, fig, ax, 'k', '-', 'grid_cell_polys')
-                        plot_multipolygon_w_holes(pBoards_multi, fig, ax, 'm', '-','pBoards_multi')
-                        ax.scatter(x, y, color='red', s=50)
-                        plt.show()
+#                     # ##### Plot for visual verification (can comment this out during final runs ##### 
+#                     # print(f"search_by_subpoly_flag = {search_by_subpoly_flag}")
+#                     if plotting:
+#                         fig, ax = plt.subplots(dpi=300, figsize=(10,8))
+#                         ax.set_aspect('equal')
+#                         plot_poly_list_w_holes(grid_cell_polys, fig, ax, 'k', '-', 'grid_cell_polys')
+#                         plot_multipolygon_w_holes(pBoards_multi, fig, ax, 'm', '-','pBoards_multi')
+#                         ax.scatter(x, y, color='red', s=50)
+#                         plt.show()
                     
-                    # for i, poly in enumerate(grid_cell_polys):
-                    #     print(f"Grid cell {i} available area:\t{poly.intersection(pBoards_multi).area}")
+#                     # for i, poly in enumerate(grid_cell_polys):
+#                     #     print(f"Grid cell {i} available area:\t{poly.intersection(pBoards_multi).area}")
                         
-                    # print(f"\nTotal available area: {pBoards_multi.area}")
+#                     # print(f"\nTotal available area: {pBoards_multi.area}")
                     
-                    # #################################################################################
+#                     # #################################################################################
                     
-                    if not pt.intersects(pBoards_multi):
-                        grid_try_count += 1
-                        continue
-                    else:
-                        break
+#                     if not pt.intersects(pBoards_multi):
+#                         grid_try_count += 1
+#                         continue
+#                     else:
+#                         break
             
-            if not search_by_subpoly_flag:    
-                if grid_try_count > grid_tries:     # If the grid cell didn't turn up a possible placement, move on to another grid cell
-                    continue
+#             if not search_by_subpoly_flag:    
+#                 if grid_try_count > grid_tries:     # If the grid cell didn't turn up a possible placement, move on to another grid cell
+#                     continue
                 
-            if search_by_subpoly_flag:
-                i = random.choice(range(len(use_subpolys)))
-                xmin_sub, ymin_sub, xmax_sub, ymax_sub = use_subpolys[i].bounds
-                while True:
-                    x = random.uniform(xmin_sub,xmax_sub)
-                    y = random.uniform(ymin_sub,ymax_sub)
-                    pt = Point(x,y)
-                    if pt.intersects(use_subpolys[i]):
-                        if plotting:
-                            # Plot to see what the behavior is for placement
-                            fig, ax = plt.subplots(dpi=300, figsize=(10,8))
-                            ax.set_aspect('equal')
-                            plot_multipolygon_w_holes(pBoards_multi, fig, ax, 'm', '-','pBoards_multi')
-                            ax.scatter(x, y, color='red', s=50)
-                            plt.show()
-                        break
+#             if search_by_subpoly_flag:
+#                 i = random.choice(range(len(use_subpolys)))
+#                 xmin_sub, ymin_sub, xmax_sub, ymax_sub = use_subpolys[i].bounds
+#                 while True:
+#                     x = random.uniform(xmin_sub,xmax_sub)
+#                     y = random.uniform(ymin_sub,ymax_sub)
+#                     pt = Point(x,y)
+#                     if pt.intersects(use_subpolys[i]):
+#                         if plotting:
+#                             # Plot to see what the behavior is for placement
+#                             fig, ax = plt.subplots(dpi=300, figsize=(10,8))
+#                             ax.set_aspect('equal')
+#                             plot_multipolygon_w_holes(pBoards_multi, fig, ax, 'm', '-','pBoards_multi')
+#                             ax.scatter(x, y, color='red', s=50)
+#                             plt.show()
+#                         break
             
-            if rod_type not in rod_types:
-                rod_type_i = random.randint(0,3)
-            else:
-                rod_type_i = rod_types.index(rod_type)
-            if all_on:
-                on = 1
-            else:
-                # on_prob = 0.5   # Percentage chance of a pressure rod being on initially
-                on_chance = random.uniform(0,1)
-                if on_prob >= on_chance:
-                    on = 1
-                else:
-                    on = 0
-                # on = random.randint(0,1)
-            prod = PressureRod(x,y,rod_types[rod_type_i],on)
-            intersects_sidecomponents = False
-            intersects_sideprobes = False
-            intersects_botcomponents = False
-            intersects_sideprobes = False
-            centroids = []
-            perturbing = False
+#             if rod_type not in rod_types:
+#                 rod_type_i = random.randint(0,3)
+#             else:
+#                 rod_type_i = rod_types.index(rod_type)
+#             if all_on:
+#                 on = 1
+#             else:
+#                 # on_prob = 0.5   # Percentage chance of a pressure rod being on initially
+#                 on_chance = random.uniform(0,1)
+#                 if on_prob >= on_chance:
+#                     on = 1
+#                 else:
+#                     on = 0
+#                 # on = random.randint(0,1)
+#             prod = PressureRod(x,y,rod_types[rod_type_i],on)
+#             intersects_sidecomponents = False
+#             intersects_sideprobes = False
+#             intersects_botcomponents = False
+#             intersects_sideprobes = False
+#             centroids = []
+#             perturbing = False
             
-            # Make sure pressure rod is within the UUT and make sure it doesn't intersect any components, using the appropriate buffer sizes
-            if not prod.center.intersects(pBoards_multi):
-                continue
-            # if not prod.center.within(pBoards_multi):
-            #     continue
+#             # Make sure pressure rod is within the UUT and make sure it doesn't intersect any components, using the appropriate buffer sizes
+#             if not prod.center.intersects(pBoards_multi):
+#                 continue
+#             # if not prod.center.within(pBoards_multi):
+#             #     continue
             
-            ### TRYING MOVING AWAY FROM INTERSECTION VIOLATIONS TO SALVAGE DESIGN ###
-            # Gather status of currently placed prod
-            if prod.tip_component_buffer.intersects(sidecomponents):
-                intersects_sidecomponents = True
-                intersection_sidecomponents = prod.tip_component_buffer.intersection(sidecomponents)
+#             ### TRYING MOVING AWAY FROM INTERSECTION VIOLATIONS TO SALVAGE DESIGN ###
+#             # Gather status of currently placed prod
+#             if prod.tip_component_buffer.intersects(sidecomponents):
+#                 intersects_sidecomponents = True
+#                 intersection_sidecomponents = prod.tip_component_buffer.intersection(sidecomponents)
                 
-            if prod.tip_from_top_probe_buffer.intersects(side_probes):
-                intersects_sideprobes = True
-                intersection_sideprobes = prod.tip_from_top_probe_buffer.intersection(side_probes)
+#             if prod.tip_from_top_probe_buffer.intersects(side_probes):
+#                 intersects_sideprobes = True
+#                 intersection_sideprobes = prod.tip_from_top_probe_buffer.intersection(side_probes)
             
-            # Parse the status of intersections
-            if not intersects_sidecomponents and not intersects_sideprobes:
-                pass
-            elif intersects_sidecomponents and not intersects_sideprobes:
-                perturbing = True
-                if intersection_sidecomponents.geom_type == "Polygon":
-                    centroids.append(intersection_sidecomponents.centroid)
-                else:
-                    for poly in intersection_sidecomponents.geoms:
-                        centroids.append(poly.centroid)
-            elif not intersects_sidecomponents and intersects_sideprobes:
-                perturbing = True
-                if intersection_sideprobes.geom_type == "Polygon":
-                    centroids.append(intersection_sideprobes.centroid)
-                else:
-                    for poly in intersection_sideprobes.geoms:
-                        centroids.append(poly.centroid)                    
-            else:
-                perturbing = True
-                # both side components and side probes are intersected by the current prod
-                if intersection_sidecomponents.geom_type == "Polygon":
-                    centroids.append(intersection_sidecomponents.centroid)
-                else:
-                    for poly in intersection_sidecomponents.geoms:
-                        centroids.append(poly.centroid)
+#             # Parse the status of intersections
+#             if not intersects_sidecomponents and not intersects_sideprobes:
+#                 pass
+#             elif intersects_sidecomponents and not intersects_sideprobes:
+#                 perturbing = True
+#                 if intersection_sidecomponents.geom_type == "Polygon":
+#                     centroids.append(intersection_sidecomponents.centroid)
+#                 else:
+#                     for poly in intersection_sidecomponents.geoms:
+#                         centroids.append(poly.centroid)
+#             elif not intersects_sidecomponents and intersects_sideprobes:
+#                 perturbing = True
+#                 if intersection_sideprobes.geom_type == "Polygon":
+#                     centroids.append(intersection_sideprobes.centroid)
+#                 else:
+#                     for poly in intersection_sideprobes.geoms:
+#                         centroids.append(poly.centroid)                    
+#             else:
+#                 perturbing = True
+#                 # both side components and side probes are intersected by the current prod
+#                 if intersection_sidecomponents.geom_type == "Polygon":
+#                     centroids.append(intersection_sidecomponents.centroid)
+#                 else:
+#                     for poly in intersection_sidecomponents.geoms:
+#                         centroids.append(poly.centroid)
                         
-                if intersection_sideprobes.geom_type == "Polygon":
-                    centroids.append(intersection_sideprobes.centroid)
-                else:
-                    for poly in intersection_sideprobes.geoms:
-                        centroids.append(poly.centroid)            
+#                 if intersection_sideprobes.geom_type == "Polygon":
+#                     centroids.append(intersection_sideprobes.centroid)
+#                 else:
+#                     for poly in intersection_sideprobes.geoms:
+#                         centroids.append(poly.centroid)            
             
-            if perturbing:                    
-                centroids_x = [centroid.x for centroid in centroids]
-                centroids_y = [centroid.y for centroid in centroids]
+#             if perturbing:                    
+#                 centroids_x = [centroid.x for centroid in centroids]
+#                 centroids_y = [centroid.y for centroid in centroids]
                 
-                avg_x = np.mean(centroids_x)
-                avg_y = np.mean(centroids_y)
+#                 avg_x = np.mean(centroids_x)
+#                 avg_y = np.mean(centroids_y)
                 
-                diff_x = prod.x - avg_x
-                diff_y = prod.y - avg_y
+#                 diff_x = prod.x - avg_x
+#                 diff_y = prod.y - avg_y
                 
-                mag_diff = np.sqrt(diff_x**2 + diff_y**2)
+#                 mag_diff = np.sqrt(diff_x**2 + diff_y**2)
                 
-                unit_x = diff_x / mag_diff
-                unit_y = diff_y / mag_diff
+#                 unit_x = diff_x / mag_diff
+#                 unit_y = diff_y / mag_diff
                 
-                # print("")
-                # print("-"*60)
-                # print("PERTURBING PROD AWAY FROM INTERSECTION")
+#                 # print("")
+#                 # print("-"*60)
+#                 # print("PERTURBING PROD AWAY FROM INTERSECTION")
                 
-                for i in range(tries):
-                    valid = True
-                    prodxmin, prodymin, prodxmax, prodymax = prod.tip_component_buffer.bounds
-                    stepsize = (prodxmax - prodxmin)/tries
-                    new_x = prod.x + unit_x*stepsize
-                    new_y = prod.y + unit_y*stepsize
+#                 for i in range(tries):
+#                     valid = True
+#                     prodxmin, prodymin, prodxmax, prodymax = prod.tip_component_buffer.bounds
+#                     stepsize = (prodxmax - prodxmin)/tries
+#                     new_x = prod.x + unit_x*stepsize
+#                     new_y = prod.y + unit_y*stepsize
                     
-                    prod.update_pressure_rod(new_x, new_y, prod.rod_type, prod.on)
+#                     prod.update_pressure_rod(new_x, new_y, prod.rod_type, prod.on)
                     
-                    # # Check for intersections on top side
-                    # if sidenum == 1:
-                    #     component_intersection_area = prod.tip_component_buffer.intersection(topcomponents).area
-                    #     probe_intersection_area = prod.tip_from_top_probe_buffer.intersection(top_probes).area
-                    # elif sidenum == 2:
-                    #     component_intersection_area = prod.tip_component_buffer.intersection(botcomponents).area
-                    #     probe_intersection_area = prod.tip_from_top_probe_buffer.intersection(bot_probes).area
-                    # else:
-                    #     raise ValueError("sidenum must be equal to 1 or 2")
+#                     # # Check for intersections on top side
+#                     # if sidenum == 1:
+#                     #     component_intersection_area = prod.tip_component_buffer.intersection(topcomponents).area
+#                     #     probe_intersection_area = prod.tip_from_top_probe_buffer.intersection(top_probes).area
+#                     # elif sidenum == 2:
+#                     #     component_intersection_area = prod.tip_component_buffer.intersection(botcomponents).area
+#                     #     probe_intersection_area = prod.tip_from_top_probe_buffer.intersection(bot_probes).area
+#                     # else:
+#                     #     raise ValueError("sidenum must be equal to 1 or 2")
                     
-                    # print(f"\n{topcomponent_intersection_area} intersection with top components")
-                    # print(f"{top_probe_intersection_area} intersection with top probes")
+#                     # print(f"\n{topcomponent_intersection_area} intersection with top components")
+#                     # print(f"{top_probe_intersection_area} intersection with top probes")
                     
-                    if not prod.center.intersects(pBoards_multi):
-                        valid = False
-                        continue                
-                    if prod.tip_component_buffer.intersects(sidecomponents):
-                        valid = False
-                        continue
-                    if prod.tip_from_top_probe_buffer.intersects(side_probes):
-                        valid = False
-                        continue
+#                     if not prod.center.intersects(pBoards_multi):
+#                         valid = False
+#                         continue                
+#                     if prod.tip_component_buffer.intersects(sidecomponents):
+#                         valid = False
+#                         continue
+#                     if prod.tip_from_top_probe_buffer.intersects(side_probes):
+#                         valid = False
+#                         continue
                     
-                    if valid == True:
-                        break
+#                     if valid == True:
+#                         break
                     
-            if not prod.center.intersects(pBoards_multi):
-                valid = False
-                continue
+#             if not prod.center.intersects(pBoards_multi):
+#                 valid = False
+#                 continue
                 
             
             
-            # ## END NEW CODE ###
+#             # ## END NEW CODE ###
             
-            # # ## ORIGINAL CODE ###
-            # if prod.tip_component_buffer.intersects(topcomponents):
-            #     continue
+#             # # ## ORIGINAL CODE ###
+#             # if prod.tip_component_buffer.intersects(topcomponents):
+#             #     continue
             
-            # # Make sure the pressure rod isn't too close to any top probes
-            # if prod.tip_from_top_probe_buffer.intersects(top_probes):
-            #     continue
+#             # # Make sure the pressure rod isn't too close to any top probes
+#             # if prod.tip_from_top_probe_buffer.intersects(top_probes):
+#             #     continue
                 
-            # Make sure pressure rod doesn't conflict with any previously-placed pressure rods
-            if len(prods_chosen) > 0:
-                for prod_chosen in prods_chosen:
-                    if prod_chosen.top.intersects(prod.top_from_top_probe_buffer):
-                        valid = False
-                        break
-                    # dist = centroid_distance(prod.tip,prod_chosen.tip)
-                    # if dist < prod.ctc:
-                    #     valid = False
-                    #     break
-                if valid == False:
-                    continue
-            ### END ORIGINAL CODE ###
+#             # Make sure pressure rod doesn't conflict with any previously-placed pressure rods
+#             if len(prods_chosen) > 0:
+#                 for prod_chosen in prods_chosen:
+#                     if prod_chosen.top.intersects(prod.top_from_top_probe_buffer):
+#                         valid = False
+#                         break
+#                     # dist = centroid_distance(prod.tip,prod_chosen.tip)
+#                     # if dist < prod.ctc:
+#                     #     valid = False
+#                     #     break
+#                 if valid == False:
+#                     continue
+#             ### END ORIGINAL CODE ###
             
-            if valid == True:
-                prods_chosen.append(prod)
-                chromosome_x.append(prod.x)
-                chromosome_y.append(prod.y)
-                chromosome_rod_type.append(rod_type_i)
-                chromosome_on.append(on)
+#             if valid == True:
+#                 prods_chosen.append(prod)
+#                 chromosome_x.append(prod.x)
+#                 chromosome_y.append(prod.y)
+#                 chromosome_rod_type.append(rod_type_i)
+#                 chromosome_on.append(on)
                 
-        return chromosome_x, chromosome_y, chromosome_rod_type, chromosome_on
+#         return chromosome_x, chromosome_y, chromosome_rod_type, chromosome_on
     
-    chromosome_x_top, chromosome_y_top, chromosome_rod_type_top, chromosome_on_top = place_pressure_rods(nprods_top, 1, pBoards_multi, top_probes, topcomponents)
-    chromosome_x_bot, chromosome_y_bot, chromosome_rod_type_bot, chromosome_on_bot = place_pressure_rods(nprods_bot, 2, pBoards_multi, bot_probes, botcomponents)
+#     chromosome_x_top, chromosome_y_top, chromosome_rod_type_top, chromosome_on_top = place_pressure_rods(nprods_top, 1, pBoards_multi, top_probes, topcomponents)
+#     chromosome_x_bot, chromosome_y_bot, chromosome_rod_type_bot, chromosome_on_bot = place_pressure_rods(nprods_bot, 2, pBoards_multi, bot_probes, botcomponents)
     
     
-    chromosome = []
-    chromosome.extend(chromosome_x_top)
-    chromosome.extend(chromosome_x_bot)
-    chromosome.extend(chromosome_y_top)
-    chromosome.extend(chromosome_y_bot)
-    chromosome.extend(chromosome_rod_type_top)
-    chromosome.extend(chromosome_rod_type_bot)
-    chromosome.extend(chromosome_on_top)
-    chromosome.extend(chromosome_on_bot)
+#     chromosome = []
+#     chromosome.extend(chromosome_x_top)
+#     chromosome.extend(chromosome_x_bot)
+#     chromosome.extend(chromosome_y_top)
+#     chromosome.extend(chromosome_y_bot)
+#     chromosome.extend(chromosome_rod_type_top)
+#     chromosome.extend(chromosome_rod_type_bot)
+#     chromosome.extend(chromosome_on_top)
+#     chromosome.extend(chromosome_on_bot)
 
-    return chromosome
+#     return chromosome
 
 
 def create_chromosome_v3(nprods_top, nstandoffs, top_constraints, bot_constraints, all_on=False, on_prob=0.5, rod_type="All"):
@@ -1225,7 +1296,8 @@ def create_chromosome_v3(nprods_top, nstandoffs, top_constraints, bot_constraint
                     
                     # #################################################################################
                     
-                    if not pt.intersects(pBoards_multi):
+                    if not pBoards_multi.contains(pt):
+                    # if not pt.intersects(pBoards_multi):
                         grid_try_count += 1
                         continue
                     else:
@@ -1242,7 +1314,8 @@ def create_chromosome_v3(nprods_top, nstandoffs, top_constraints, bot_constraint
                     x = random.uniform(xmin_sub,xmax_sub)
                     y = random.uniform(ymin_sub,ymax_sub)
                     pt = Point(x,y)
-                    if pt.intersects(use_subpolys[i]):
+                    if use_subpolys[i].contains(pt):
+                    # if pt.intersects(use_subpolys[i]):
                         if plotting:
                             # Plot to see what the behavior is for placement
                             fig, ax = plt.subplots(dpi=300, figsize=(10,8))
@@ -1282,10 +1355,13 @@ def create_chromosome_v3(nprods_top, nstandoffs, top_constraints, bot_constraint
             
             # Make sure pressure rod is within the UUT and make sure it doesn't intersect any components, using the appropriate buffer sizes
             if sidenum == 1:
-                if not prod.center.intersects(pBoards_multi):
+                if not pBoards_multi.contains(prod.tip):
+                # if not pBoards_multi.contains(prod.center):
+                # if not prod.center.intersects(pBoards_multi):
                     continue
             else:
-                if not prod.tip_UUT_buffer.within(pBoards_multi):
+                if not pBoards_multi.contains(prod.tip_UUT_buffer):
+                # if not prod.tip_UUT_buffer.within(pBoards_multi):
                     continue
             
             ### TRYING MOVING AWAY FROM INTERSECTION VIOLATIONS TO SALVAGE DESIGN ###
@@ -1371,7 +1447,9 @@ def create_chromosome_v3(nprods_top, nstandoffs, top_constraints, bot_constraint
                     # print(f"\n{topcomponent_intersection_area} intersection with top components")
                     # print(f"{top_probe_intersection_area} intersection with top probes")
                     
-                    if not prod.center.intersects(pBoards_multi):
+                    if not pBoards_multi.contains(prod.tip):
+                    # if not pBoards_multi.contains(prod.center):
+                    # if not prod.center.intersects(pBoards_multi):
                         valid = False
                         continue                
                     if prod.tip_component_buffer.intersects(sidecomponents):
@@ -1384,7 +1462,9 @@ def create_chromosome_v3(nprods_top, nstandoffs, top_constraints, bot_constraint
                     if valid == True:
                         break
                     
-            if not prod.center.intersects(pBoards_multi):
+            if not pBoards_multi.contains(prod.tip):
+            # if not pBoards_multi.contains(prod.center):
+            # if not prod.center.intersects(pBoards_multi):
                 valid = False
                 continue
             
@@ -1620,19 +1700,19 @@ def validate_prods(prods_chosen, top_constraints):
         
 #     return initial_population
 
-def initialize_population_simple(npop, nprods, pBoards, pComponentsTop, df_Probes, pBoards_diff, all_on, on_prob, rod_type):
-    initial_population = []
-    for i in range(npop):
-        initial_population.append(create_chromosome(nprods, pBoards, pComponentsTop, df_Probes, pBoards_diff, all_on, on_prob, rod_type))
-        print(f"Chromosome {i} of {npop} created")
-    return initial_population
+# def initialize_population_simple(npop, nprods, pBoards, pComponentsTop, df_Probes, pBoards_diff, all_on, on_prob, rod_type):
+#     initial_population = []
+#     for i in range(npop):
+#         initial_population.append(create_chromosome(nprods, pBoards, pComponentsTop, df_Probes, pBoards_diff, all_on, on_prob, rod_type))
+#         print(f"Chromosome {i} of {npop} created")
+#     return initial_population
 
-def initialize_population_simple_v2(npop, nprods_top, nprods_bot, top_constraints, bot_constraints, all_on, on_prob, rod_type):
-    initial_population = []
-    for i in range(npop):
-        initial_population.append(create_chromosome_v2(nprods_top, nprods_bot, top_constraints, bot_constraints, all_on, on_prob, rod_type))
-        print(f"Chromosome {i} of {npop} created")
-    return initial_population
+# def initialize_population_simple_v2(npop, nprods_top, nprods_bot, top_constraints, bot_constraints, all_on, on_prob, rod_type):
+#     initial_population = []
+#     for i in range(npop):
+#         initial_population.append(create_chromosome_v2(nprods_top, nprods_bot, top_constraints, bot_constraints, all_on, on_prob, rod_type))
+#         print(f"Chromosome {i} of {npop} created")
+#     return initial_population
 
 def initialize_population_simple_v3(npop, nprods_top, nstandoffs, top_constraints, bot_constraints, all_on, on_prob, rod_type):
     initial_population = []
@@ -1641,18 +1721,18 @@ def initialize_population_simple_v3(npop, nprods_top, nstandoffs, top_constraint
         print(f"Chromosome {i} of {npop} created")
     return initial_population
 
-def interpret_chromosome_to_prods(chromosome, nprods):    
-    prods = []
-    for i in range(nprods):
-        x = chromosome[i]
-        y = chromosome[i+nprods]
-        rod_type_int = int(chromosome[i+2*nprods])
-        rod_type = interpret_rod_type_int(rod_type_int)
-        on = chromosome[i+3*nprods]
-        prod = PressureRod(x, y, rod_type, on)
-        prods.append(prod)
+# def interpret_chromosome_to_prods(chromosome, nprods):    
+#     prods = []
+#     for i in range(nprods):
+#         x = chromosome[i]
+#         y = chromosome[i+nprods]
+#         rod_type_int = int(chromosome[i+2*nprods])
+#         rod_type = interpret_rod_type_int(rod_type_int)
+#         on = chromosome[i+3*nprods]
+#         prod = PressureRod(x, y, rod_type, on)
+#         prods.append(prod)
     
-    return prods
+#     return prods
 
 def interpret_chromosome_to_prods_v2(chromosome, nprods_top, nprods_bot):    
     prods = []
@@ -1685,24 +1765,24 @@ def interpret_rod_type(rod_type):
     
     return rod_types.index(rod_type)
 
-def interpret_prods_to_chromosome(prods):
-    chromosome_x = []
-    chromosome_y = []
-    chromosome_rod_type = []
-    chromosome_on = []
-    for prod in prods:
-        chromosome_x.append(prod.x)
-        chromosome_y.append(prod.y)
-        chromosome_rod_type.append(interpret_rod_type(prod.rod_type))
-        chromosome_on.append(prod.on)
+# def interpret_prods_to_chromosome(prods):
+#     chromosome_x = []
+#     chromosome_y = []
+#     chromosome_rod_type = []
+#     chromosome_on = []
+#     for prod in prods:
+#         chromosome_x.append(prod.x)
+#         chromosome_y.append(prod.y)
+#         chromosome_rod_type.append(interpret_rod_type(prod.rod_type))
+#         chromosome_on.append(prod.on)
             
-    chromosome = []
-    chromosome.extend(chromosome_x)
-    chromosome.extend(chromosome_y)
-    chromosome.extend(chromosome_rod_type)
-    chromosome.extend(chromosome_on)
+#     chromosome = []
+#     chromosome.extend(chromosome_x)
+#     chromosome.extend(chromosome_y)
+#     chromosome.extend(chromosome_rod_type)
+#     chromosome.extend(chromosome_on)
     
-    return chromosome
+#     return chromosome
 
 def interpret_prods_to_chromosome_v2(prods, nprods_top, nprods_bot):
     chromosome_x_top = []
@@ -2165,51 +2245,92 @@ def runFEA_new_path(new_path_xml):
 
 
 # %% Utility functions
+def plot_chromosome(chromosome, top_constraints, bot_constraints, nprods_top, nprods_bot):
+    fig1, ax1 = plt.subplots(figsize=(10,8),dpi=300)
+    fig2, ax2 = plt.subplots(figsize=(10,8),dpi=300)
+    ax1.set_aspect('equal')
+    ax2.set_aspect('equal')
+    prods = interpret_chromosome_to_prods_v2(chromosome, nprods_top, nprods_bot)
+    
+    pBoards_multi_top = top_constraints[0]
+    top_probes = top_constraints[1]
+    topcomponents = top_constraints[2]
+    pBoards_multi_bot = bot_constraints[0]
+    bot_probes = bot_constraints[1]
+    botcomponents = bot_constraints[2]
+    
+    # Plot top side
+    plot_multipolygon_w_holes(pBoards_multi_top, fig1, ax1, 'b', '-', 'Available Top Area')
+    plot_multipolygon_w_holes(top_probes, fig1, ax1, 'm', '-', 'Top Probes')
+    plot_multipolygon_w_holes(topcomponents, fig1, ax1, 'k', '-', 'Top Components')
+    for i in range(nprods_top):
+        plotting.plot_polygon(prods[i].tip, ax=ax1, add_points=False, color='g', linewidth=0.5)
+    # # plt.legend()
+    # plt.title("Top side")
+    # plt.show()
+    
+    
+    # Plot bottom side
+    plot_multipolygon_w_holes(pBoards_multi_bot, fig2, ax2, 'b', '-', 'Available bot Area')
+    plot_multipolygon_w_holes(bot_probes, fig2, ax2, 'm', '-', 'bot Probes')
+    plot_multipolygon_w_holes(botcomponents, fig2, ax2, 'k', '-', 'bot Components')
+    for i in range(nprods_top, nprods_top+nprods_bot):
+        plotting.plot_polygon(prods[i].tip, ax=ax2, add_points=False, color='g', linewidth=0.5)
+    # plt.legend()
+    # plt.title("Bottom side")
+    plt.show()
+    
+    
+
 def plot_poly_list_w_holes(poly_list, fig, ax, color, linestyle, label):
-    # fig, ax = plt.subplots(figsize=(10,8),dpi=300)
-    # ax.set_aspect('equal')
-    first = True
     for poly in poly_list:
-        # Check if poly is a Polygon or MultiPolygon
-        if poly.geom_type == "Polygon":
-            xe, ye = poly.exterior.xy
-            if first == True:
-                ax.plot(xe, ye, color=color, label=label, linestyle=linestyle, linewidth=0.5)
-                first = False
-            else:
-                ax.plot(xe, ye, color=color, linestyle=linestyle, linewidth=0.5)
-            for inner in poly.interiors:
-                xi, yi = zip(*inner.coords[:])
-                ax.plot(xi, yi, color=color, linestyle=linestyle, linewidth=0.5)
-        elif poly.geom_type == "MultiPolygon":
-            for geom in poly.geoms:
-                xe, ye = geom.exterior.xy
-                if first == True:
-                    ax.plot(xe, ye, color=color, label=label, linestyle=linestyle, linewidth=0.5)
-                    first = False
-                else:
-                    ax.plot(xe, ye, color=color, linestyle=linestyle, linewidth=0.5)
-                for inner in geom.interiors:
-                    xi, yi = zip(*inner.coords[:])
-                    ax.plot(xi, yi, color=color, linestyle=linestyle, linewidth=0.5)            
-        else:
-            raise IOError("Shape is not a polygon")
+        plotting.plot_polygon(poly, ax=ax, add_points=False, color=color, linewidth=0.5, label=label)
+    
+    # # fig, ax = plt.subplots(figsize=(10,8),dpi=300)
+    # # ax.set_aspect('equal')
+    # first = True
+    # for poly in poly_list:
+    #     # Check if poly is a Polygon or MultiPolygon
+    #     if poly.geom_type == "Polygon":
+    #         xe, ye = poly.exterior.xy
+    #         if first == True:
+    #             ax.plot(xe, ye, color=color, label=label, linestyle=linestyle, linewidth=0.5)
+    #             first = False
+    #         else:
+    #             ax.plot(xe, ye, color=color, linestyle=linestyle, linewidth=0.5)
+    #         for inner in poly.interiors:
+    #             xi, yi = zip(*inner.coords[:])
+    #             ax.plot(xi, yi, color=color, linestyle=linestyle, linewidth=0.5)
+    #     elif poly.geom_type == "MultiPolygon":
+    #         for geom in poly.geoms:
+    #             xe, ye = geom.exterior.xy
+    #             if first == True:
+    #                 ax.plot(xe, ye, color=color, label=label, linestyle=linestyle, linewidth=0.5)
+    #                 first = False
+    #             else:
+    #                 ax.plot(xe, ye, color=color, linestyle=linestyle, linewidth=0.5)
+    #             for inner in geom.interiors:
+    #                 xi, yi = zip(*inner.coords[:])
+    #                 ax.plot(xi, yi, color=color, linestyle=linestyle, linewidth=0.5)            
+    #     else:
+    #         raise IOError("Shape is not a polygon")
             
 def plot_multipolygon_w_holes(multipoly, fig, ax, color, linestyle, label):
-    first = True
-    if multipoly.geom_type == "MultiPolygon":
-        for geom in multipoly.geoms:
-            xe, ye = geom.exterior.xy
-            if first == True:
-                ax.plot(xe, ye, color=color, label=label, linestyle=linestyle, linewidth=0.5)
-                first = False
-            else:
-                ax.plot(xe, ye, color=color, linestyle=linestyle, linewidth=0.5)
-            for inner in geom.interiors:
-                xi, yi = zip(*inner.coords[:])
-                ax.plot(xi, yi, color=color, linestyle=linestyle, linewidth=0.5)            
-    else:
-        raise IOError("Shape is not a multipolygon")
+    plotting.plot_polygon(multipoly, ax=ax, add_points=False, color=color, linewidth=0.5, label=label)
+    # first = True
+    # if multipoly.geom_type == "MultiPolygon":
+    #     for geom in multipoly.geoms:
+    #         xe, ye = geom.exterior.xy
+    #         if first == True:
+    #             ax.plot(xe, ye, color=color, label=label, linestyle=linestyle, linewidth=0.5)
+    #             first = False
+    #         else:
+    #             ax.plot(xe, ye, color=color, linestyle=linestyle, linewidth=0.5)
+    #         for inner in geom.interiors:
+    #             xi, yi = zip(*inner.coords[:])
+    #             ax.plot(xi, yi, color=color, linestyle=linestyle, linewidth=0.5)            
+    # else:
+    #     raise IOError("Shape is not a multipolygon")
             
 def plot_probes_guidepins(df, fig, ax, linestyle, identifier):
     first = True
@@ -2317,20 +2438,20 @@ if __name__ == "__main__":
     nprods = 20
     # nprods = np.max([len(df_PressureRods), nprods_small, nprods_large])
     
-    # Generate random population of pressure rod designs
-    npop = 10
-    start_time = time.time()
-    print(f"--- Generating population of {npop} chromosomes with {nprods*4} variables each---")
-    # chromosomes = [create_chromosome(nprods,pBoards,pComponentsTop,df_Probes,pBoards_diff) for _ in range(npop)] # Could this be modified to use multiprocessing? This will become very time intensive with larger populations
-    initial_population = initialize_population_simple(npop, nprods, pBoards, pComponentsTop, df_Probes, pBoards_diff)
-    print(f"--- Population generated in {(time.time()-start_time)/60} minutes ---")
-    # print("--- COMPLETE ---")
-    
+    # # Generate random population of pressure rod designs
+    # npop = 10
     # start_time = time.time()
     # print(f"--- Generating population of {npop} chromosomes with {nprods*4} variables each---")
-    # initial_population = initialize_population_multiprocessing(npop, nprods, pBoards, pComponentsTop, df_Probes, pBoards_diff)
-    # print(f"--- Population generated in {(time.time()-start_time)/60} minutes USING MULTIPROCESSING ---")
+    # # chromosomes = [create_chromosome(nprods,pBoards,pComponentsTop,df_Probes,pBoards_diff) for _ in range(npop)] # Could this be modified to use multiprocessing? This will become very time intensive with larger populations
+    # initial_population = initialize_population_simple(npop, nprods, pBoards, pComponentsTop, df_Probes, pBoards_diff)
+    # print(f"--- Population generated in {(time.time()-start_time)/60} minutes ---")
+    # # print("--- COMPLETE ---")
     
-    # print("--- COMPLETE ---")
+    # # start_time = time.time()
+    # # print(f"--- Generating population of {npop} chromosomes with {nprods*4} variables each---")
+    # # initial_population = initialize_population_multiprocessing(npop, nprods, pBoards, pComponentsTop, df_Probes, pBoards_diff)
+    # # print(f"--- Population generated in {(time.time()-start_time)/60} minutes USING MULTIPROCESSING ---")
+    
+    # # print("--- COMPLETE ---")
     
     

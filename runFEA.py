@@ -40,18 +40,7 @@ def loadFEApath(filename):
         FEApath = pickle.load(fi)
     return FEApath
 
-def runFEA(FEApath, inputfile):
-    # directory = pathlib.Path(inputfile)
-    # directory = str(directory.parent) + "\Output"
-    # args = [FEApath, f"/input {inputfile}", "/noprogressbar"]
-    # # args = [FEApath, f"/input {inputfile}", f"/output {directory}", "/noprogressbar"]
-    # exit_code = subprocess.call(args, shell=False)
-    # if exit_code == 0:
-    #     print(f"{inputfile} ran successfully")
-    # else:
-    #     print(f"{inputfile} failed with code {exit_code}")
-    # return exit_code
-      
+def runFEA(FEApath, inputfile):      
     args = f'/input "{inputfile}" /noprogressbar'
     command = f'"{FEApath}" {args}'
     result = subprocess.run(command)
@@ -93,8 +82,6 @@ def resultsToDataframe(inputfile):
     
     # Get the most recently modified subdirectory that matches the needed substring from the inputfile
     latest_subdir = find_latest_folder_with_substring(directory, filename)
-    # latest_subdir = max(glob.glob(os.path.join(directory, f'{filename}*/')), key=os.path.getmtime) # FIXME: Can't use this method with multiprocessing - gives multiple fitnesses that are identical
-    # latest_subdir = max(glob.glob(os.path.join(directory, '*/')), key=os.path.getmtime) # FIXME: Can't use this method with multiprocessing - gives multiple fitnesses that are identical
     
     meshfile = latest_subdir + "\\FEA_MeshNodes.csv"
     
@@ -110,8 +97,6 @@ def resultsToDataframe_v2(inputfile):
     
     # Get the most recently modified subdirectory that matches the needed substring from the inputfile
     latest_subdir = find_latest_folder_with_substring(directory, filename)
-    # latest_subdir = max(glob.glob(os.path.join(directory, f'{filename}*/')), key=os.path.getmtime) # FIXME: Can't use this method with multiprocessing - gives multiple fitnesses that are identical
-    # latest_subdir = max(glob.glob(os.path.join(directory, '*/')), key=os.path.getmtime) # FIXME: Can't use this method with multiprocessing - gives multiple fitnesses that are identical
     
     meshfile = latest_subdir + "\\FEAReport.csv"
     
