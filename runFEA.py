@@ -132,10 +132,7 @@ def getFitness_v2(dfreport):
     return strain_xx, strain_yy, strain_xy, principalStrain_min, principalStrain_max
     
 
-if __name__ == "__main__":
-    
-    # FEApath = "C:/Users/Ryan Larson/github/strain-gen-opt/FEA/FEA.exe"
-    
+if __name__ == "__main__":    
     # # Choose FEA path here
     # initialdirFEA = "E:/github/strain-gen-opt/FEA"
     # FEApath = chooseFEApath(initialdirFEA)

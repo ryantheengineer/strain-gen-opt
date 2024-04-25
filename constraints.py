@@ -36,8 +36,23 @@ import queue
 import copy
 
 # %% XML Functions
-# Get the root of the XML tree that will be used for all other input parsing
 def get_XML_tree(initialdir):
+    """
+    Get the root of the XML tree that will be used for all other input parsing.
+
+    Parameters
+    ----------
+    initialdir : str
+        Directory path where the file selection window should open.
+
+    Returns
+    -------
+    treeroot : TYPE
+        DESCRIPTION.
+    inputfile : TYPE
+        DESCRIPTION.
+
+    """
     filetypes = (("XML", ["*.xml"]),) 
     root = Tk()
     root.wm_attributes('-topmost', 1)
@@ -55,8 +70,16 @@ def get_XML_tree(initialdir):
 
 
 # %% Fixture Reading Functions
-# Super function for getting fixture data
 def get_constraint_geometry():
+    """
+    Super function for getting fixture data
+
+    Returns
+    -------
+    results : tuple
+        Every element of the constraint geometry in an easily accessible tuple.
+
+    """
     # Load previously chosen FEA path here
     filename = 'FEApath.pk'
     with open(filename, 'rb') as fi:
@@ -84,14 +107,44 @@ def get_constraint_geometry():
     df_PressureRods = get_point_geometry(root, "PressureRods")
     df_Standoffs = get_point_geometry(root, "Standoffs")
     
+    pBoards_diff_top = get_pBoards_diff_side(1, pBoards, pComponentsTop, I_Plate, pShape)
+    pBoards_diff_bot = get_pBoards_diff_side(2, pBoards, pComponentsBot, I_Plate, pShape)
+    top_constraints = get_board_constraints_single_side(pBoards, pComponentsTop, 1, df_Probes, pBoards_diff_top)
+    bot_constraints = get_board_constraints_single_side(pBoards, pComponentsBot, 2, df_Probes, pBoards_diff_bot)
+    
     results = (root, inputfile, pBoards, pOutline, pShape, pComponentsTop,
                pComponentsBot, Pressure, I_Plate, Stripper, Probe, Countersink,
-               df_Probes, df_GuidePins, df_PressureRods, df_Standoffs)
+               df_Probes, df_GuidePins, df_PressureRods, df_Standoffs,
+               pBoards_diff_top, pBoards_diff_bot, top_constraints, bot_constraints)
     return results
 
 
-# Panel, Plates
 def get_fixture_geometry(root, identifier):
+    """
+    Get the geometry for fixture components (panel, plates)
+
+    Parameters
+    ----------
+    root : XML tree object
+        DESCRIPTION.
+    identifier : TYPE
+        DESCRIPTION.
+
+    Raises
+    ------
+    Exception
+        DESCRIPTION.
+
+    Returns
+    -------
+    region_polys : TYPE
+        DESCRIPTION.
+    numRegions : TYPE
+        DESCRIPTION.
+    numHoles : TYPE
+        DESCRIPTION.
+
+    """
     polyshapes = root.findall('.//polyshape')
     fixture = None
     region_polys = None
@@ -2416,6 +2469,10 @@ if __name__ == "__main__":
     df_GuidePins = results[13]
     df_PressureRods = results[14]
     df_Standoffs = results[15]
+    pBoards_diff_top = results[16]
+    pBoards_diff_bot = results[17]
+    top_constraints = results[18]
+    bot_constraints = results[19]
     
     fig, ax = plt.subplots(dpi=300, figsize=(10,8))
     ax.set_aspect('equal')

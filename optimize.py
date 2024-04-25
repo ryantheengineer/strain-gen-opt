@@ -33,8 +33,8 @@ def crossover_prods(pop, crossover_rate, nprods_top, nprods_bot, top_constraints
 
     Parameters
     ----------
-    pop : TYPE
-        DESCRIPTION.
+    pop : numpy array
+        Array where each row is a single chromosome, or design.
     crossover_rate : TYPE
         DESCRIPTION.
     nprods : int
@@ -46,6 +46,35 @@ def crossover_prods(pop, crossover_rate, nprods_top, nprods_bot, top_constraints
     -------
     offspring : TYPE
         DESCRIPTION.
+        
+    pop : numpy array
+        Array where each row is a single chromosome, or design.
+    mutation_rate : int
+        The number of child designs to produce via mutation.
+    nprods_top : int
+        The number of pressure rods on the top side of the UUT.
+    nprods_bot : int
+        The number of standoffs on the bottom side of the UUT.
+    top_constraints : TYPE
+        DESCRIPTION.
+    bot_constraints : TYPE
+        DESCRIPTION.
+    all_on : bool
+        Flag for whether every pressure rod and standoff should be included in
+        the end design.
+    on_prob : float
+        The probability of an individual pressure rod or standoff being flipped
+        from off to on (going from not included in the end design to being
+        included).
+    rod_type: str
+        Name of the pressure rod type to use for all pressure rods, if all
+        pressure rods are to be the same type in the design (usually true).
+
+    Returns
+    -------
+    offspring : numpy array
+        Array where each row is a single chromosome, or design. This will later
+        be appended to pop for each generation.
 
     """
     print(f"Performing crossover to create {crossover_rate} child designs")
@@ -172,7 +201,6 @@ def crossover_prods(pop, crossover_rate, nprods_top, nprods_bot, top_constraints
             
         # Interpret the child back to chromosome form
         child_chromosome = constraints.interpret_prods_to_chromosome_v2(child_prods, nprods_top, nprods_bot)
-        # child_chromosome = constraints.interpret_prods_to_chromosome(child_prods)
         offspring[i, :] = child_chromosome
         
         # # Plot the parent and child designs for examination
@@ -192,21 +220,37 @@ def mutation(pop, n_mutated, mutation_rate, nprods_top, nprods_bot, top_constrai
 
     Parameters
     ----------
-    pop : TYPE
-        DESCRIPTION.
-    n_mutated : TYPE
-        DESCRIPTION.
-    mutation_rate : TYPE
-        DESCRIPTION.
-    nprods : TYPE
-        DESCRIPTION.
+    pop : numpy array
+        Array where each row is a single chromosome, or design.
+    n_mutated : int
+        The number of child designs to produce via mutation.
+    mutation_rate : float
+        The chance that an individual pressure rod will be replaced by a random
+        new one.
+    nprods_top : int
+        The number of pressure rods on the top side of the UUT.
+    nprods_bot : int
+        The number of standoffs on the bottom side of the UUT.
     top_constraints : TYPE
         DESCRIPTION.
+    bot_constraints : TYPE
+        DESCRIPTION.
+    all_on : bool
+        Flag for whether every pressure rod and standoff should be included in
+        the end design.
+    on_prob : float
+        The probability of an individual pressure rod or standoff being flipped
+        from off to on (going from not included in the end design to being
+        included).
+    rod_type: str
+        Name of the pressure rod type to use for all pressure rods, if all
+        pressure rods are to be the same type in the design (usually true).
 
     Returns
     -------
-    TYPE
-        DESCRIPTION.
+    offspring : numpy array
+        Array where each row is a single chromosome, or design. This will later
+        be appended to pop for each generation.
 
     """
     print("Entering mutation phase...creating children from crossover")
@@ -227,8 +271,6 @@ def mutation(pop, n_mutated, mutation_rate, nprods_top, nprods_bot, top_constrai
             # Interpret each parent into PressureRod representation
             parent1_prods = constraints.interpret_chromosome_to_prods_v2(parent1, nprods_top, nprods_bot)
             parent2_prods = constraints.interpret_chromosome_to_prods_v2(parent2, nprods_top, nprods_bot)
-            # parent1_prods = constraints.interpret_chromosome_to_prods(parent1, nprods)
-            # parent2_prods = constraints.interpret_chromosome_to_prods(parent2, nprods)
             
             # Perform crossover on PressureRod representation, with the understanding
             # that both parents were previously validated against all constraints,
@@ -438,8 +480,8 @@ def local_search(pop, n_searched, localsearch_rate, on_prob, perturbrate, maxmag
 
     Parameters
     ----------
-    pop : TYPE
-        DESCRIPTION.
+    pop : numpy array
+        Array where each row is a single chromosome, or design.
     n_searched : int
         Number of designs to perform local search on.
     localsearch_rate : TYPE
@@ -821,8 +863,8 @@ def evaluation(pop, nobjs, gen, nprods_top, nprods_bot, inputfile, constraint_ge
 
     Parameters
     ----------
-    pop : TYPE
-        DESCRIPTION.
+    pop : numpy array
+        Array where each row is a single chromosome, or design.
     nobjs : int
         Number of design objective functions.
     gen : int
@@ -866,11 +908,10 @@ def evaluation(pop, nobjs, gen, nprods_top, nprods_bot, inputfile, constraint_ge
     df_GuidePins = constraint_geom[13]
     df_PressureRods = constraint_geom[14]
     df_Standoffs = constraint_geom[15]
-    
-    pBoards_diff_top = constraints.get_pBoards_diff_side(1, pBoards, pComponentsTop, I_Plate, pShape)
-    pBoards_diff_bot = constraints.get_pBoards_diff_side(2, pBoards, pComponentsBot, I_Plate, pShape)
-    top_constraints = constraints.get_board_constraints_single_side(pBoards, pComponentsTop, 1, df_Probes, pBoards_diff_top)
-    bot_constraints = constraints.get_board_constraints_single_side(pBoards, pComponentsBot, 2, df_Probes, pBoards_diff_bot)
+    pBoards_diff_top = constraint_geom[16]
+    pBoards_diff_bot = constraint_geom[17]
+    top_constraints = constraint_geom[18]
+    bot_constraints = constraint_geom[19]
     
     # ncpus = 2
     ncpus = multiprocessing.cpu_count()
@@ -902,7 +943,7 @@ def evaluation(pop, nobjs, gen, nprods_top, nprods_bot, inputfile, constraint_ge
     
     
     # Add verification here that all output files have been created. If any have not been created, run those FEA cases specifically.
-    time.sleep(60)
+    time.sleep(30)
     # FIXME: Either here or elsewhere, the code is allowing pressure rods to be placed where they are not allowed. This causes FEA to fail.
     while True:
         # Get directory to search for output
@@ -986,7 +1027,7 @@ def crowding_calculation(fitness_values):
 
     Returns
     -------
-    TYPE
+    crowding_distance : TYPE
         DESCRIPTION.
 
     """
@@ -1024,7 +1065,7 @@ def remove_using_crowding(fitness_values, number_solutions_needed):
 
     Returns
     -------
-    TYPE
+    selected_pop_index : TYPE
         DESCRIPTION.
 
     """
@@ -1088,17 +1129,19 @@ def selection(pop, fitness_values, pop_size):
 
     Parameters
     ----------
-    pop : TYPE
-        DESCRIPTION.
+    pop : numpy array
+        Array where each row is a single chromosome, or design.
     fitness_values : TYPE
         DESCRIPTION.
     pop_size : TYPE
-        DESCRIPTION.
+        The number of individual chromosomes that will be retained to become
+        parents after each generation.
 
     Returns
     -------
-    TYPE
-        DESCRIPTION.
+    selected_pop : numpy array
+        The selected chromosomes that have the best fitness values (and are
+        the most spread out in the design space to increase diversity).
 
     """
     
@@ -1134,8 +1177,8 @@ def main_optimization():
         DESCRIPTION.
     best_fitnesses : TYPE
         DESCRIPTION.
-    pop : TYPE
-        DESCRIPTION.
+    pop : numpy array
+        Array where each row is a single chromosome, or design.
 
     """
     start_time = time.time()
@@ -1158,38 +1201,36 @@ def main_optimization():
     df_GuidePins = constraint_geom[13]
     df_PressureRods = constraint_geom[14]
     df_Standoffs = constraint_geom[15]
+    pBoards_diff_top = constraint_geom[16]
+    pBoards_diff_bot = constraint_geom[17]
+    top_constraints = constraint_geom[18]
+    bot_constraints = constraint_geom[19]
     
-    # Estimate a number of pressure rods for the top side that would make sense
-    # print("--- Estimating possible pressure rods ---")
-    pBoards_diff_top = constraints.get_pBoards_diff_side(1, pBoards, pComponentsTop, I_Plate, pShape)
-    pBoards_diff_bot = constraints.get_pBoards_diff_side(2, pBoards, pComponentsBot, I_Plate, pShape)
+    # # Estimate a number of pressure rods for the top side that would make sense
     nprods_small, nprods_large = constraints.grid_nprods_v2(pBoards_diff_top) # FIXME: Need to make this consider bottom side pressure rods
-    
-    top_constraints = constraints.get_board_constraints_single_side(pBoards, pComponentsTop, 1, df_Probes, pBoards_diff_top)
-    bot_constraints = constraints.get_board_constraints_single_side(pBoards, pComponentsBot, 2, df_Probes, pBoards_diff_bot)
     
     # Parameters
     print("Setting genetic algorithm parameters")
-    pop_size = 30              # initial number of chromosomes
-    rate_crossover = 10         # number of chromosomes that we apply crossover to
-    rate_mutation = 10         # number of chromosomes that we apply mutation to
+    pop_size = 40              # initial number of chromosomes
+    rate_crossover = 15         # number of chromosomes that we apply crossover to
+    rate_mutation = 15         # number of chromosomes that we apply mutation to
     chance_mutation = 0.2       # normalized percent chance that an individual pressure rod will be mutated
-    n_searched = 10             # number of chromosomes that we apply local_search to
-    chance_localsearch = 0.2
+    n_searched = 15             # number of chromosomes that we apply local_search to
+    chance_localsearch = 0.3
     on_prob_initial = 0.5   # Initial percentage chance that a pressure rod will be on (only in the initial population)
     on_prob = 0.8           # Likelihood an "off" pressure rod will be switched on
     perturbrate = 1.0
-    maxmag = 0.1             # coordinate displacement during local_search
+    maxmag = 0.5             # coordinate displacement during local_search
     typerate = 0.1
-    maximum_generation = 20    # number of iterations
+    maximum_generation = 10    # number of iterations
     nobjs = 5
     
     end_early = True
     # FIXME: Add ability to pickle the variables needed to continue an optimization later
     
-    nprods = 64
-    nprods_top = 64
-    nstandoffs = 12
+    # nprods = 64
+    nprods_top = 12
+    nstandoffs = 6
     print(f"nprods_small = {nprods_small}")
     print(f"nprods_large = {nprods_large}")
     nprods_top_input = input(f"Current nprods_top: {nprods_top}\n If this quantity is adequate press enter. Otherwise choose an integer value and press enter.\n")
@@ -1222,13 +1263,14 @@ def main_optimization():
     best_fitnesses_2 = []
     best_fitnesses_3 = []
     best_fitnesses_4 = []
+    best_overall_fitnesses = []
+    
     # NSGA-II main loop
     for i in range(maximum_generation):
         print('\n\nGeneration:', i)
         offspring_from_crossover = crossover_prods(pop, rate_crossover, nprods_top, nstandoffs, top_constraints, bot_constraints)
         offspring_from_mutation = mutation(pop, rate_mutation, chance_mutation, nprods_top, nstandoffs, top_constraints, bot_constraints, all_on, on_prob, rod_type)
         offspring_from_local_search = local_search(pop, n_searched, chance_localsearch, on_prob, perturbrate, maxmag, typerate, nprods_top, nstandoffs, top_constraints, bot_constraints, all_on, rod_type)
-        # offspring_from_local_search = local_search(pop, n_searched, chance_localsearch, on_prob, perturbrate, maxmag, typerate, nprods, top_constraints, all_on, rod_type)
         
         # Append children (crossover, mutation, local search) to parents
         pop = np.append(pop, offspring_from_crossover, axis=0)
@@ -1245,7 +1287,10 @@ def main_optimization():
             complete_fitness_values = copy.deepcopy(fitness_values_temp)
         else:
             complete_fitness_values = np.append(complete_fitness_values, fitness_values_temp, axis=0)
+        
             
+        # Save the best individual fitness values (not necessarily the same
+        # design) for each generation
         j = fitness_values[:,0].argmin()
         best_fitnesses_1.append(fitness_values[j,:])
         j = fitness_values[:,1].argmin()
@@ -1254,16 +1299,51 @@ def main_optimization():
         best_fitnesses_3.append(fitness_values[j,:])
         j = fitness_values[:,3].argmin()
         best_fitnesses_4.append(fitness_values[j,:])
-        pop = selection(pop, fitness_values, pop_size)  # we arbitrarily set desired pareto front size = pop_size
-        fig,ax = plt.subplots(dpi=300)
-        for j in range(len(pop)):
-            x1 = fitness_values[j][0]
-            x2 = fitness_values[j][1]
-            ax.scatter(x1,x2,marker='o',color='b')
-        ax.set_xlabel('Strain_xx')
-        ax.set_ylabel('Strain_yy')
-        ax.set_title(f"Generation: {i}")
+        
+        # Save the best overal fitness design (sum of all objectives) for each
+        # generation
+        # Calculate the row sums
+        row_sums = np.sum(fitness_values, axis=1)
+        min_row_index = np.argmin(row_sums)
+        row_with_min_sum = fitness_values[min_row_index,:]
+        best_overall_fitnesses.append(row_with_min_sum)
+        
+        # # Plot the current generation to show progress
+        # pop = selection(pop, fitness_values, pop_size + rate_crossover + rate_mutation + n_searched)  # we arbitrarily set desired pareto front size = pop_size
+        # if i == 0:
+        #     maxlim = min(np.max(fitness_values),10000)
+        # fig,ax = plt.subplots(dpi=300)
+        # for j in range(len(pop)):
+        #     x1 = fitness_values[j][0]
+        #     x2 = fitness_values[j][1]
+        #     ax.scatter(x1,x2,marker='o',color='b')
+        # ax.set_xlim(0,maxlim)
+        # ax.set_ylim(0,maxlim)
+        # ax.set_xlabel('Strain_xx')
+        # ax.set_ylabel('Strain_yy')
+        # ax.set_title(f"Generation: {i}")
+        # plt.show()
+        
+        # Plot the progress of the best design per generation in all 5 objectives
+        plt.figure(figsize=(10,8), dpi=300)
+        if i == 0:
+            plt.scatter([0],best_overall_fitnesses[0][0], label="Max strain xx")
+            plt.scatter([0],best_overall_fitnesses[0][1], label="Max strain yy")
+            plt.scatter([0],best_overall_fitnesses[0][2], label="Max strain xy")
+            plt.scatter([0],best_overall_fitnesses[0][3], label="Max principal strain min")
+            plt.scatter([0],best_overall_fitnesses[0][4], label="Max principal strain max")
+        else:
+            best_overall_fitnesses = np.asarray(best_overall_fitnesses)
+            gen_ints = [val for val in range(0, i+1)]
+            plt.plot(gen_ints, best_overall_fitnesses[:,0], label="Max strain xx")
+            plt.plot(gen_ints, best_overall_fitnesses[:,1], label="Max strain yy")
+            plt.plot(gen_ints, best_overall_fitnesses[:,2], label="Max strain xy")
+            plt.plot(gen_ints, best_overall_fitnesses[:,3], label="Max principal strain min")
+            plt.plot(gen_ints, best_overall_fitnesses[:,4], label="Max principal strain max")
+        plt.title(f"Generation: {i}")
+        plt.legend()
         plt.show()
+        
         
         # If the best fitness for each of the first three strain parameters 
         # are less than 500 microstrain, then end the optimization early
@@ -1306,67 +1386,52 @@ def main_optimization():
     # 3D plot of optimization progression
     colnames = ["Strain_xx", "Strain_yy", "Strain_xy", "Principal_Strain_Min", "Principal_Strain_Max", "Generation"]
     df_fitness_values = pd.DataFrame(complete_fitness_values, columns=colnames)
-    # # Add RGB values based on the generation
-    # Rvals = list(np.linspace(0, 1, maximum_generation))
-    # Gvals = list(np.zeros((maximum_generation)))
-    # Bvals = list(np.linspace(1, 0, maximum_generation))
-    
-    # R = []
-    # G = []
-    # B = []
-    # for index, row in df_fitness_values.iterrows():
-    #     i = int(df_fitness_values.loc[index, "Generation"])
-    #     R.append(Rvals[i])
-    #     G.append(Gvals[i])
-    #     B.append(Bvals[i])
-        
-    # df_fitness_values["R"] = R
-    # df_fitness_values["G"] = G
-    # df_fitness_values["B"] = B
     
     
-    # def get_rgb(row):
-    #     i = int(row['Generation'])
-    #     rgb_values = [Rvals[i], Gvals[i], Bvals[i]]
-    #     return rgb_values
-
-    # # Apply the function to create the RGB column
-    # df_fitness_values['RGB'] = df_fitness_values.apply(get_rgb, axis=1)
-    
-    
-    # Pareto front visualization
-    fitness_values = evaluation(pop, nobjs, i, nprods_top, nstandoffs, inputfile, constraint_geom, all_on, on_prob, rod_type)
-    index = np.arange(pop.shape[0]).astype(int)
-    pareto_front_index = pareto_front_finding(fitness_values, index)
-    pop = pop[pareto_front_index, :]
-    fitness_values = fitness_values[pareto_front_index]
+    # # Pareto front visualization
+    # fitness_values = evaluation(pop, nobjs, i, nprods_top, nstandoffs, inputfile, constraint_geom, all_on, on_prob, rod_type)
+    # index = np.arange(pop.shape[0]).astype(int)
+    # pareto_front_index = pareto_front_finding(fitness_values, index)
+    # pop = pop[pareto_front_index, :]
+    # fitness_values = fitness_values[pareto_front_index]
     best_fitnesses_1 = np.asarray(best_fitnesses_1)
     best_fitnesses_2 = np.asarray(best_fitnesses_2)
     best_fitnesses_3 = np.asarray(best_fitnesses_3)
     best_fitnesses_4 = np.asarray(best_fitnesses_4)
-    plt.figure(dpi=300)
-    plt.scatter(fitness_values[:, 0],fitness_values[:, 1], label='Pareto optimal front')
-    plt.scatter(best_fitnesses_1[:,0],best_fitnesses_1[:,1], label="Optimal objective 1")
-    plt.scatter(best_fitnesses_2[:,0],best_fitnesses_2[:,1], label="Optimal objective 2")
-    plt.legend(loc='best')
-    plt.xlabel('Objective function F1')
-    plt.ylabel('Objective function F2')
-    plt.title('Optimal designs over all generations')
-    # plt.grid(b=1)
-    plt.show()
+    # plt.figure(dpi=300)
+    # plt.scatter(fitness_values[:, 0],fitness_values[:, 1], label='Pareto optimal front')
+    # plt.scatter(best_fitnesses_1[:,0],best_fitnesses_1[:,1], label="Optimal objective 1")
+    # plt.scatter(best_fitnesses_2[:,0],best_fitnesses_2[:,1], label="Optimal objective 2")
+    # plt.legend(loc='best')
+    # plt.xlabel('Objective function F1')
+    # plt.ylabel('Objective function F2')
+    # plt.title('Optimal designs over all generations')
+    # # plt.grid(b=1)
+    # plt.show()
     
     end_time = time.time()
     
     print(f"\n\nSetup time:\t{end_setup_time-start_time}")
     print(f"Total elapsed time:\t{end_time-start_time}")
     
+    # Plot the best fitnesses per parameter for each generation (not
+    # necessarily from the same design)
     plt.figure(dpi=300)
     plt.plot(best_fitnesses_1[:,0], label="Max strain xx")
     plt.plot(best_fitnesses_2[:,1], label="Max strain yy")
     plt.plot(best_fitnesses_3[:,2], label="Max strain xy")
-    plt.plot(best_fitnesses_4[:,3], label="Sum max ++principal strains")
+    plt.plot(best_fitnesses_4[:,3], label="Sum max principal strains")
     plt.title("Fitnesses by objective")
     plt.legend()
+    
+    # Plot the individual fitnesses per parameter from the best individual
+    # design per generation
+    plt.figure(dpi=300)
+    plt.plot(best_overall_fitnesses[:][0], label="Max strain xx")
+    plt.plot(best_overall_fitnesses[:][1], label="Max strain yy")
+    plt.plot(best_overall_fitnesses[:][2], label="Max strain xy")
+    plt.plot(best_overall_fitnesses[:][3], label="Max principal strain min")
+    plt.plot(best_overall_fitnesses[:][4], label="Max principal strain max")
     
     
     best_fitnesses = np.concatenate((best_fitnesses_1, best_fitnesses_2, best_fitnesses_3, best_fitnesses_4), axis=1)
