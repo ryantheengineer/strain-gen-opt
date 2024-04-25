@@ -71,3 +71,13 @@ The genetic algorithm parameters can be found in the main function of
 | ---- | ---- |
 | `pop_size` | The number of designs that will be selected as parents out of each generation. Also the size of the initial random population. |
 | `rate_crossover` | The number of child designs that will be created for each generation, using the crossover method. |
+| `rate_mutation` | The number of child designs that will be created for each generation, using the mutation method. |
+| `chance_mutation` | The normalized percent chance that an individual pressure rod will be mutated within a given child design. |
+| `n_searched` | The number of child designs that will be created for each generation, using the local search method. |
+| `chance_localsearch` | The normalized percent chance that an individual pressure rod will be mutated within a given child design. |
+| `maximum_generation` | The number of generations that the optimization will be allowed to run to, unless options are selected to end early. |
+| `end_early` | A boolean flag that determines whether the optimization will automatically stop early if an acceptable design is discovered. |
+| `nprods_top` | The number of pressure rods to include on the top side of the UUT. |
+| `nstandoffs` | The number of standoffs, or board stops, to include on the bottom side of the UUT. |
+| `all_on` | A boolean flag to determine whether the design space should be simplified to a single pressure rod type. |
+| `rod_type` | A string variable with the name of the single pressure rod type to be used, if desired. |
