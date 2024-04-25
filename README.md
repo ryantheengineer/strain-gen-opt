@@ -68,6 +68,6 @@ The genetic algorithm parameters can be found in the main function of
 
 ### Useful Parameters
 | Variable Name | Description |
-| ---- |:----:|
+| ---- | ---- |
 | `pop_size` | The number of designs that will be selected as parents out of each generation. Also the size of the initial random population. |
 | `rate_crossover` | The number of child designs that will be created for each generation, using the crossover method. |
