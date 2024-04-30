@@ -1211,16 +1211,16 @@ def main_optimization():
     
     # Parameters
     print("Setting genetic algorithm parameters")
-    pop_size = 40              # initial number of chromosomes
-    rate_crossover = 15         # number of chromosomes that we apply crossover to
-    rate_mutation = 15         # number of chromosomes that we apply mutation to
-    chance_mutation = 0.2       # normalized percent chance that an individual pressure rod will be mutated
-    n_searched = 15             # number of chromosomes that we apply local_search to
-    chance_localsearch = 0.3
+    pop_size = 30              # initial number of chromosomes
+    rate_crossover = 20         # number of chromosomes that we apply crossover to
+    rate_mutation = 20         # number of chromosomes that we apply mutation to
+    chance_mutation = 0.3       # normalized percent chance that an individual pressure rod will be mutated
+    n_searched = 20             # number of chromosomes that we apply local_search to
+    chance_localsearch = 0.4
     on_prob_initial = 0.5   # Initial percentage chance that a pressure rod will be on (only in the initial population)
     on_prob = 0.8           # Likelihood an "off" pressure rod will be switched on
     perturbrate = 1.0
-    maxmag = 0.5             # coordinate displacement during local_search
+    maxmag = 1.0             # coordinate displacement during local_search
     typerate = 0.1
     maximum_generation = 10    # number of iterations
     nobjs = 5
@@ -1229,8 +1229,8 @@ def main_optimization():
     # FIXME: Add ability to pickle the variables needed to continue an optimization later
     
     # nprods = 64
-    nprods_top = 12
-    nstandoffs = 6
+    nprods_top = 64
+    nstandoffs = 12
     print(f"nprods_small = {nprods_small}")
     print(f"nprods_large = {nprods_large}")
     nprods_top_input = input(f"Current nprods_top: {nprods_top}\n If this quantity is adequate press enter. Otherwise choose an integer value and press enter.\n")
@@ -1308,21 +1308,21 @@ def main_optimization():
         row_with_min_sum = fitness_values[min_row_index,:]
         best_overall_fitnesses.append(row_with_min_sum)
         
-        # # Plot the current generation to show progress
-        # pop = selection(pop, fitness_values, pop_size + rate_crossover + rate_mutation + n_searched)  # we arbitrarily set desired pareto front size = pop_size
-        # if i == 0:
-        #     maxlim = min(np.max(fitness_values),10000)
-        # fig,ax = plt.subplots(dpi=300)
-        # for j in range(len(pop)):
-        #     x1 = fitness_values[j][0]
-        #     x2 = fitness_values[j][1]
-        #     ax.scatter(x1,x2,marker='o',color='b')
-        # ax.set_xlim(0,maxlim)
-        # ax.set_ylim(0,maxlim)
-        # ax.set_xlabel('Strain_xx')
-        # ax.set_ylabel('Strain_yy')
-        # ax.set_title(f"Generation: {i}")
-        # plt.show()
+        # Plot the current generation to show progress
+        pop = selection(pop, fitness_values, pop_size + rate_crossover + rate_mutation + n_searched)  # we arbitrarily set desired pareto front size = pop_size
+        if i == 0:
+            maxlim = min(np.max(fitness_values),10000)
+        fig,ax = plt.subplots(dpi=300)
+        for j in range(len(pop)):
+            x1 = fitness_values[j][0]
+            x2 = fitness_values[j][1]
+            ax.scatter(x1,x2,marker='o',color='b')
+        ax.set_xlim(0,maxlim)
+        ax.set_ylim(0,maxlim)
+        ax.set_xlabel('Strain_xx')
+        ax.set_ylabel('Strain_yy')
+        ax.set_title(f"Generation: {i}")
+        plt.show()
         
         # Plot the progress of the best design per generation in all 5 objectives
         plt.figure(figsize=(10,8), dpi=300)
@@ -1340,6 +1340,7 @@ def main_optimization():
             plt.plot(gen_ints, best_overall_fitnesses[:,2], label="Max strain xy")
             plt.plot(gen_ints, best_overall_fitnesses[:,3], label="Max principal strain min")
             plt.plot(gen_ints, best_overall_fitnesses[:,4], label="Max principal strain max")
+            best_overall_fitnesses = list(best_overall_fitnesses)
         plt.title(f"Generation: {i}")
         plt.legend()
         plt.show()
@@ -1414,34 +1415,34 @@ def main_optimization():
     print(f"\n\nSetup time:\t{end_setup_time-start_time}")
     print(f"Total elapsed time:\t{end_time-start_time}")
     
-    # Plot the best fitnesses per parameter for each generation (not
-    # necessarily from the same design)
-    plt.figure(dpi=300)
-    plt.plot(best_fitnesses_1[:,0], label="Max strain xx")
-    plt.plot(best_fitnesses_2[:,1], label="Max strain yy")
-    plt.plot(best_fitnesses_3[:,2], label="Max strain xy")
-    plt.plot(best_fitnesses_4[:,3], label="Sum max principal strains")
-    plt.title("Fitnesses by objective")
-    plt.legend()
+    # # Plot the best fitnesses per parameter for each generation (not
+    # # necessarily from the same design)
+    # plt.figure(dpi=300)
+    # plt.plot(best_fitnesses_1[:,0], label="Max strain xx")
+    # plt.plot(best_fitnesses_2[:,1], label="Max strain yy")
+    # plt.plot(best_fitnesses_3[:,2], label="Max strain xy")
+    # plt.plot(best_fitnesses_4[:,3], label="Sum max principal strains")
+    # plt.title("Fitnesses by objective")
+    # plt.legend()
     
-    # Plot the individual fitnesses per parameter from the best individual
-    # design per generation
-    plt.figure(dpi=300)
-    plt.plot(best_overall_fitnesses[:][0], label="Max strain xx")
-    plt.plot(best_overall_fitnesses[:][1], label="Max strain yy")
-    plt.plot(best_overall_fitnesses[:][2], label="Max strain xy")
-    plt.plot(best_overall_fitnesses[:][3], label="Max principal strain min")
-    plt.plot(best_overall_fitnesses[:][4], label="Max principal strain max")
+    # # Plot the individual fitnesses per parameter from the best individual
+    # # design per generation
+    # plt.figure(dpi=300)
+    # plt.plot(best_overall_fitnesses[:][0], label="Max strain xx")
+    # plt.plot(best_overall_fitnesses[:][1], label="Max strain yy")
+    # plt.plot(best_overall_fitnesses[:][2], label="Max strain xy")
+    # plt.plot(best_overall_fitnesses[:][3], label="Max principal strain min")
+    # plt.plot(best_overall_fitnesses[:][4], label="Max principal strain max")
     
     
-    best_fitnesses = np.concatenate((best_fitnesses_1, best_fitnesses_2, best_fitnesses_3, best_fitnesses_4), axis=1)
+    # best_fitnesses = np.concatenate((best_fitnesses_1, best_fitnesses_2, best_fitnesses_3, best_fitnesses_4), axis=1)
 
     # Plot the fitness values in a plotly 3d plot
     fig = px.scatter_3d(df_fitness_values, x="Strain_xx", y="Strain_yy", z="Strain_xy",
                         color='Generation', color_continuous_scale='plasma')
     fig.show(renderer='browser')
     
-    return fitness_values, best_fitnesses, pop, fig
+    return fitness_values, df_fitness_values, pop, fig
 
 if __name__ == "__main__":
-    fitness_values, best_fitnesses, pop, fig = main_optimization()
+    fitness_values, df_fitness_values, pop, fig = main_optimization()

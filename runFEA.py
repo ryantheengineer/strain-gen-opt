@@ -140,21 +140,21 @@ if __name__ == "__main__":
     # Load previously chosen FEA path here
     FEApath = loadFEApath('FEApath.pk')
     
-    initialdir = str(pathlib.Path(FEApath).parent) + "Examples"
+    # initialdir = str(pathlib.Path(FEApath).parent) + "Examples"
     
-    filetypes = (("XML", ["*.xml"]),)
+    # filetypes = (("XML", ["*.xml"]),)
     
-    root = Tk()
-    root.wm_attributes('-topmost', 1)
-    inputfile = fd.askopenfilename(
-            title="Select FEA input file",
-            initialdir=initialdir,
-            filetypes=filetypes
-            )
-    root.destroy()
+    # root = Tk()
+    # root.wm_attributes('-topmost', 1)
+    # inputfile = fd.askopenfilename(
+    #         title="Select FEA input file",
+    #         initialdir=initialdir,
+    #         filetypes=filetypes
+    #         )
+    # root.destroy()
     
-    runFEA(FEApath, inputfile)
+    # runFEA(FEApath, inputfile)
     
-    dfmesh = resultsToDataframe(inputfile)
+    # dfmesh = resultsToDataframe(inputfile)
     
-    strain_xx, strain_yy, strain_xy, principalStrain_min, principalStrain_max = getFitness(dfmesh)
+    # strain_xx, strain_yy, strain_xy, principalStrain_min, principalStrain_max = getFitness(dfmesh)
