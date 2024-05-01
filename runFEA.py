@@ -17,6 +17,23 @@ from datetime import datetime
 import numpy as np
 
 def chooseFEApath(initialdir):
+    """
+    Saves the path to FEA.exe for convenient use later. This should be run
+    during setup of the optimization codebase, before the first optimization
+    run.
+
+    Parameters
+    ----------
+    initialdir : str
+        Path to the initial directory where the FEA.exe file is located (for
+        convenience).
+
+    Returns
+    -------
+    FEApath : path
+        Full path to FEA executable.
+
+    """
     filetypes = (("Executable", ["*.exe"]),)
     
     root = Tk()
@@ -36,11 +53,46 @@ def chooseFEApath(initialdir):
     return FEApath
 
 def loadFEApath(filename):
+    """
+    Loads the path to FEA.exe from a pickle file name.
+
+    Parameters
+    ----------
+    filename : str
+        Pickle file where FEA.exe path data is stored. Use 'FEApath.pk' as this
+        input.
+
+    Returns
+    -------
+    FEApath : path
+        Full path to FEA.exe
+
+    """
     with open(filename, 'rb') as fi:
         FEApath = pickle.load(fi)
     return FEApath
 
-def runFEA(FEApath, inputfile):      
+def runFEA(FEApath, inputfile):
+    """
+    Run FEA on a chosen inputfile.
+
+    Parameters
+    ----------
+    FEApath : path
+        Path to FEA.exe, loaded by loadFEApath().
+    inputfile : XML filepath
+        Filepath to XML design file that is to be optimized. This is chosen via
+        Tkinter file dialog in the main optimization. The file can have
+        pressure rods and standoffs in it already; those will be removed and
+        replaced by the ones created by the optimization.
+
+    Returns
+    -------
+    int
+        Return code for FEA.exe. If it is anything other than 0, an error
+        occurred during solving.
+
+    """
     args = f'/input "{inputfile}" /noprogressbar'
     command = f'"{FEApath}" {args}'
     result = subprocess.run(command)
@@ -52,6 +104,27 @@ def runFEA(FEApath, inputfile):
     return result.returncode
 
 def find_latest_folder_with_substring(base_dir, substring):
+    """
+    Checks for the most recently-created folder with a given substring. Used to
+    choose the latest version of a given output folder, particularly if an
+    optimization run has started without deleting data from past runs in
+    base_dir.
+
+    Parameters
+    ----------
+    base_dir : str
+        Output folder where FEA solves are sent.
+    substring : str
+        String name for the current solve, including generation and iteration
+        information
+
+    Returns
+    -------
+    latest_folder : path
+        Path to the most recently-created folder that has substring in its
+        name.
+
+    """
     latest_folder = None
     latest_timestamp = None
 
@@ -75,6 +148,22 @@ def find_latest_folder_with_substring(base_dir, substring):
     return latest_folder
 
 def resultsToDataframe(inputfile):
+    """
+    Get the output MeshNodes.csv data associated with the chosen input file
+    and convert it to a Pandas dataframe for processing.
+
+    Parameters
+    ----------
+    inputfile : str
+        Path to the chosen input file.
+
+    Returns
+    -------
+    df : Pandas dataframe
+        Dataframe of the FEA_MeshNodes.csv file associated with the chosen
+        input file.
+
+    """
     directory = pathlib.Path(inputfile)
     directory = str(directory.parent) + "/Output"
     path, filename = os.path.split(inputfile)
@@ -90,6 +179,22 @@ def resultsToDataframe(inputfile):
 
 
 def resultsToDataframe_v2(inputfile):
+    """
+    Get the output FEAReport.csv data associated with the chosen input file and
+    convert it to a Pandas dataframe for processing.
+
+    Parameters
+    ----------
+    inputfile : str
+        Path to the chosen input file.
+
+    Returns
+    -------
+    df : Pandas dataframe
+        Dataframe of the FEAReport.csv file associated with the chosen input
+        file.
+
+    """
     directory = pathlib.Path(inputfile)
     directory = str(directory.parent) + "/Output"
     path, filename = os.path.split(inputfile)
@@ -106,10 +211,30 @@ def resultsToDataframe_v2(inputfile):
 
 
 def getFitness(dfmesh):
-    # abssums = dfmesh.abs().sum()
-    # absmeans = dfmesh.abs().mean()
+    """
+    Get the design fitness parameters using the maximum absolute value of the
+    mesh strain. MUST use data from FEA_MeshNodes.csv.
+
+    Parameters
+    ----------
+    dfmesh : Pandas dataframe
+        Dataframe of the FEA_Meshnodes.csv output.
+
+    Returns
+    -------
+    strain_xx : float
+        Maximum magnitude of strain in the x direction.
+    strain_yy : float
+        Maximum magnitude of strain in the y direction.
+    strain_xy : float
+        Maximum magnitude of shear strain.
+    principalStrain_min : float
+        Maximum magnitude of minimum principal strain.
+    principalStrain_max : float
+        Maximum magnitude of maximum principal strain.
+
+    """
     absmax = dfmesh.abs().max()
-    # stdevs = dfmesh.std()
     strain_xx = absmax["strain_xx"]
     strain_yy = absmax["strain_yy"]
     strain_xy = absmax["strain_xy"]
@@ -120,6 +245,29 @@ def getFitness(dfmesh):
 
 
 def getFitness_v2(dfreport):
+    """
+    Get the design fitness parameters using the maximum magnitude value found
+    in FEAReport.csv.
+
+    Parameters
+    ----------
+    dfreport : Pandas dataframe
+        Dataframe of the FEAReport.csv output.
+
+    Returns
+    -------
+    strain_xx : float
+        Maximum magnitude of strain in the x direction.
+    strain_yy : float
+        Maximum magnitude of strain in the y direction.
+    strain_xy : float
+        Maximum magnitude of shear strain.
+    principalStrain_min : float
+        Maximum magnitude of minimum principal strain.
+    principalStrain_max : float
+        Maximum magnitude of maximum principal strain.
+
+    """
     dfreport.set_index('Row', inplace=True)
     strain_xx = np.max([np.abs(dfreport.loc['horizontalStrain_max','Value']),
                         np.abs(dfreport.loc['horizontalStrain_min','Value'])])

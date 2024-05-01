@@ -1216,7 +1216,7 @@ def main_optimization():
     rate_mutation = 20         # number of chromosomes that we apply mutation to
     chance_mutation = 0.3       # normalized percent chance that an individual pressure rod will be mutated
     n_searched = 20             # number of chromosomes that we apply local_search to
-    chance_localsearch = 0.4
+    chance_localsearch = 0.3
     on_prob_initial = 0.5   # Initial percentage chance that a pressure rod will be on (only in the initial population)
     on_prob = 0.8           # Likelihood an "off" pressure rod will be switched on
     perturbrate = 1.0
@@ -1257,6 +1257,7 @@ def main_optimization():
     #     constraints.plot_chromosome(chromosome, top_constraints, bot_constraints, nprods_top, nstandoffs)
         
     pop = np.asarray(pop)
+    print(f'Initial random population size:\t{pop.shape[0]}')
     end_setup_time = time.time()
     
     best_fitnesses_1 = []
@@ -1274,12 +1275,14 @@ def main_optimization():
         
         # Append children (crossover, mutation, local search) to parents
         pop = np.append(pop, offspring_from_crossover, axis=0)
+        print(f'Population size after crossover:\t{pop.shape[0]}')
         pop = np.append(pop, offspring_from_mutation, axis=0)
+        print(f'Population size after mutation:\t{pop.shape[0]}')
         pop = np.append(pop, offspring_from_local_search, axis=0)
+        print(f'Population size after local search:\t{pop.shape[0]}')
         
         print("Evaluating fitnesses...")
         fitness_values = evaluation(pop, nobjs, i, nprods_top, nstandoffs, inputfile, constraint_geom, all_on, on_prob, rod_type)
-        # fitness_values = evaluation(pop, nobjs, i, nprods, inputfile, constraint_geom)
         fitness_values_temp = copy.deepcopy(fitness_values)
         genvals = i*np.ones((fitness_values_temp.shape[0],1))
         fitness_values_temp = np.append(fitness_values_temp, genvals, axis=1) # Add the generation number as a column for later referencing
@@ -1309,7 +1312,9 @@ def main_optimization():
         best_overall_fitnesses.append(row_with_min_sum)
         
         # Plot the current generation to show progress
-        pop = selection(pop, fitness_values, pop_size + rate_crossover + rate_mutation + n_searched)  # we arbitrarily set desired pareto front size = pop_size
+        pop = selection(pop, fitness_values, pop_size)  # we arbitrarily set desired pareto front size = pop_size
+        print(f'Population size after selection:\t{pop.shape[0]}')
+        # pop = selection(pop, fitness_values, pop_size + rate_crossover + rate_mutation + n_searched)  # we arbitrarily set desired pareto front size = pop_size
         if i == 0:
             maxlim = min(np.max(fitness_values),10000)
         fig,ax = plt.subplots(dpi=300)
@@ -1346,8 +1351,8 @@ def main_optimization():
         plt.show()
         
         
-        # If the best fitness for each of the first three strain parameters 
-        # are less than 500 microstrain, then end the optimization early
+        # If the best fitness for all of the strain parameters are less than
+        # 500 microstrain, then end the optimization early
         if not design_accepted:
             # Check if any row contains only values less than the threshold
             condition = np.all(fitness_values < 500, axis=1)
