@@ -1222,7 +1222,7 @@ def main_optimization():
     perturbrate = 1.0
     maxmag = 1.0             # coordinate displacement during local_search
     typerate = 0.1
-    maximum_generation = 10    # number of iterations
+    maximum_generation = 15    # number of iterations
     nobjs = 5
     
     end_early = True

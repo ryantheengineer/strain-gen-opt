@@ -203,7 +203,8 @@ def resultsToDataframe_v2(inputfile):
     # Get the most recently modified subdirectory that matches the needed substring from the inputfile
     latest_subdir = find_latest_folder_with_substring(directory, filename)
     
-    meshfile = latest_subdir + "\\FEAReport.csv"
+    meshfile = latest_subdir + "\\FEAFilteredReport.csv"
+    # meshfile = latest_subdir + "\\FEAReport.csv"
     
     df = pd.read_csv(meshfile)
     return df
