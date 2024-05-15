@@ -2038,10 +2038,10 @@ def read_FEA_results(root, inputfile, gen, iteration):
     path, filename = os.path.split(inputfile)
     new_path = path + "/" + new_filename
     
-    dfmesh = runFEA.resultsToDataframe_report(new_path)
+    dfreport = runFEA.resultsToDataframe_report(new_path)
     # dfmesh = runFEA.resultsToDataframe_mesh(new_path)
     
-    strain_xx, strain_yy, strain_xy, principalStrain_min, principalStrain_max = runFEA.getFitness_reportmax(dfmesh)
+    strain_xx, strain_yy, strain_xy, principalStrain_min, principalStrain_max = runFEA.getFitness_reportmax(dfreport)
     # strain_xx, strain_yy, strain_xy, principalStrain_min, principalStrain_max = runFEA.getFitness_meshmax(dfmesh)
     
     results = (strain_xx, strain_yy, strain_xy, principalStrain_min, principalStrain_max)

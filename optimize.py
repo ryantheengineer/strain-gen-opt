@@ -857,7 +857,8 @@ def local_search(pop, n_searched, localsearch_rate, on_prob, perturbrate, maxmag
     return offspring    # arr(loc_search_size x n_var)
 
 # Calculate fitness (obj function) values for each chromosome/solution
-def evaluation(pop, nobjs, gen, nprods_top, nprods_bot, inputfile, constraint_geom, all_on, on_prob, rod_type):
+def evaluation(pop, gen, nprods_top, nprods_bot, inputfile, constraint_geom, all_on, on_prob, rod_type):
+# def evaluation(pop, nobjs, gen, nprods_top, nprods_bot, inputfile, constraint_geom, all_on, on_prob, rod_type):
     """
     Run FEA on the current generation and retrieve the results.
 
@@ -1211,11 +1212,11 @@ def main_optimization():
     
     # Parameters
     print("Setting genetic algorithm parameters")
-    pop_size = 30              # initial number of chromosomes
-    rate_crossover = 60         # number of chromosomes that we apply crossover to
-    rate_mutation = 20         # number of chromosomes that we apply mutation to
+    pop_size = 5              # initial number of chromosomes
+    rate_crossover = 2         # number of chromosomes that we apply crossover to
+    rate_mutation = 2         # number of chromosomes that we apply mutation to
     chance_mutation = 0.3       # normalized percent chance that an individual pressure rod will be mutated
-    n_searched = 10             # number of chromosomes that we apply local_search to
+    n_searched = 2             # number of chromosomes that we apply local_search to
     chance_localsearch = 0.3
     on_prob_initial = 0.5   # Initial percentage chance that a pressure rod will be on (only in the initial population)
     on_prob = 0.8           # Likelihood an "off" pressure rod will be switched on
@@ -1223,7 +1224,7 @@ def main_optimization():
     maxmag = 1.0             # coordinate displacement during local_search
     typerate = 0.1
     maximum_generation = 15    # number of iterations
-    nobjs = 5
+    # nobjs = 5
     
     end_early = True
     # FIXME: Add ability to pickle the variables needed to continue an optimization later
@@ -1282,7 +1283,8 @@ def main_optimization():
         print(f'Population size after local search:\t{pop.shape[0]}')
         
         print("Evaluating fitnesses...")
-        fitness_values = evaluation(pop, nobjs, i, nprods_top, nstandoffs, inputfile, constraint_geom, all_on, on_prob, rod_type)
+        fitness_values = evaluation(pop, i, nprods_top, nstandoffs, inputfile, constraint_geom, all_on, on_prob, rod_type)
+        # fitness_values = evaluation(pop, nobjs, i, nprods_top, nstandoffs, inputfile, constraint_geom, all_on, on_prob, rod_type)
         fitness_values_temp = copy.deepcopy(fitness_values)
         genvals = i*np.ones((fitness_values_temp.shape[0],1))
         fitness_values_temp = np.append(fitness_values_temp, genvals, axis=1) # Add the generation number as a column for later referencing
@@ -1395,6 +1397,7 @@ def main_optimization():
     
     
     # # Pareto front visualization
+    # fitness_values = evaluation(pop, i, nprods_top, nstandoffs, inputfile, constraint_geom, all_on, on_prob, rod_type)
     # fitness_values = evaluation(pop, nobjs, i, nprods_top, nstandoffs, inputfile, constraint_geom, all_on, on_prob, rod_type)
     # index = np.arange(pop.shape[0]).astype(int)
     # pareto_front_index = pareto_front_finding(fitness_values, index)
