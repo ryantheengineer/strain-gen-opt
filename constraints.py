@@ -2047,6 +2047,57 @@ def read_FEA_results(root, inputfile, gen, iteration):
     results = (strain_xx, strain_yy, strain_xy, principalStrain_min, principalStrain_max)
     
     return results
+
+def read_FEA_results_blend(root, inputfile, gen, iteration, maxgen):
+    # Write the new element tree
+    tree = ET.ElementTree(root)
+    ET.indent(tree, '  ')
+    new_filename = f"FEA_GEN{gen}_ITER{iteration}.xml"
+    path, filename = os.path.split(inputfile)
+    new_path = path + "/" + new_filename
+    
+    dfreport = runFEA.resultsToDataframe_report(new_path)
+    dfmesh = runFEA.resultsToDataframe_mesh(new_path)
+    
+    strain_xx_report, strain_yy_report, strain_xy_report, principalStrain_min_report, principalStrain_max_report = runFEA.getFitness_reportmax(dfreport)
+    strain_xx_mesh, strain_yy_mesh, strain_xy_mesh, principalStrain_min_mesh, principalStrain_max_mesh = runFEA.getFitness_meshmax(dfmesh)
+    
+    results_report = (strain_xx_report, strain_yy_report, strain_xy_report, principalStrain_min_report, principalStrain_max_report)
+    results_mesh = (strain_xx_mesh, strain_yy_mesh, strain_xy_mesh, principalStrain_min_mesh, principalStrain_max_mesh)
+    
+    ###########################################################################
+    # # Give weights to each of the methods for evaluating the design performance
+    # # Linear ramp up to emphasizing report values over max mesh values
+    # wt_report = gen/maxgen
+    # wt_mesh = 1 - wt_report
+    
+    # # Full switch if threshold is met
+    # if all(results_mesh < 500):
+    #     wt_report = 1
+    #     wt_mesh = 0
+    # else:
+    #     wt_report = 0
+    #     wt_mesh = 1
+    
+    # Logistic function
+    k = 1
+    x0 = maxgen/2
+    wt_report = 1/(1 + np.exp(-k*(gen - x0)))
+    wt_mesh = 1 - wt_report
+    
+    # # Choose only one type
+    # wt_report = 0
+    # wt_mesh = 1
+    
+    strain_xx_blend = wt_report * strain_xx_report + wt_mesh * strain_xx_mesh
+    strain_yy_blend = wt_report * strain_yy_report + wt_mesh * strain_yy_mesh
+    strain_xy_blend = wt_report * strain_xy_report + wt_mesh * strain_xy_mesh
+    principalStrain_min_blend = wt_report * principalStrain_min_report + wt_mesh * principalStrain_min_mesh
+    principalStrain_max_blend = wt_report * principalStrain_max_report + wt_mesh * principalStrain_max_mesh
+    
+    results_blend = (strain_xx_blend, strain_yy_blend, strain_xy_blend, principalStrain_min_blend, principalStrain_max_blend)
+    
+    return results_blend, results_report, results_mesh
     
 
 def design_to_xml(valid_circles, df_PressureRods, root, inputfile, gen, iteration):

@@ -857,7 +857,7 @@ def local_search(pop, n_searched, localsearch_rate, on_prob, perturbrate, maxmag
     return offspring    # arr(loc_search_size x n_var)
 
 # Calculate fitness (obj function) values for each chromosome/solution
-def evaluation(pop, gen, nprods_top, nprods_bot, inputfile, constraint_geom, all_on, on_prob, rod_type):
+def evaluation(pop, gen, maxgen, nprods_top, nprods_bot, inputfile, constraint_geom, all_on, on_prob, rod_type):
 # def evaluation(pop, nobjs, gen, nprods_top, nprods_bot, inputfile, constraint_geom, all_on, on_prob, rod_type):
     """
     Run FEA on the current generation and retrieve the results.
@@ -977,10 +977,18 @@ def evaluation(pop, gen, nprods_top, nprods_bot, inputfile, constraint_geom, all
     
     # Once all the FEA cases have been accounted for, retrieve results
     results = []
+    results_report_all = []
+    results_mesh_all = []
     for i in range(pop.shape[0]):
-        results.append(constraints.read_FEA_results(root, inputfile, gen, i))
+        # results.append(constraints.read_FEA_results(root, inputfile, gen, i))
+        results_blend, results_report, results_mesh = constraints.read_FEA_results_blend(root, inputfile, gen, i, maxgen)
+        results.append(results_blend)
+        results_report_all.append(results_report)
+        results_mesh_all.append(results_mesh)
     
     fitness_values = np.array(results)
+    fitness_report = np.array(results_report_all)
+    fitness_mesh = np.array(results_mesh_all)
     
     return fitness_values
 
@@ -1283,8 +1291,7 @@ def main_optimization():
         print(f'Population size after local search:\t{pop.shape[0]}')
         
         print("Evaluating fitnesses...")
-        fitness_values = evaluation(pop, i, nprods_top, nstandoffs, inputfile, constraint_geom, all_on, on_prob, rod_type)
-        # fitness_values = evaluation(pop, nobjs, i, nprods_top, nstandoffs, inputfile, constraint_geom, all_on, on_prob, rod_type)
+        fitness_values = evaluation(pop, i, maximum_generation, nprods_top, nstandoffs, inputfile, constraint_geom, all_on, on_prob, rod_type)
         fitness_values_temp = copy.deepcopy(fitness_values)
         genvals = i*np.ones((fitness_values_temp.shape[0],1))
         fitness_values_temp = np.append(fitness_values_temp, genvals, axis=1) # Add the generation number as a column for later referencing
