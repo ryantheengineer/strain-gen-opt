@@ -11,3 +11,4 @@ venv/
 *.mat
 *Readme.txt
 *FEA XML Overview.txt
+*.zip
