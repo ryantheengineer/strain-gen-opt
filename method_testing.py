@@ -16,7 +16,49 @@ import itertools
 
 def crossover_test(pop, crossover_rate, nprods_top, nprods_bot, top_constraints, bot_constraints):
     offspring = optimize.crossover_prods(pop, crossover_rate, nprods_top, nprods_bot, top_constraints, bot_constraints)
+    offspring_prods = check_offspring(offspring)
+    # offspring_shape = offspring.shape
+    # offspring_prods = []
+    # for i in range(offspring.shape[0]):
+    #     print(f"Checking offspring {i}")
+    #     prods = constraints.interpret_chromosome_to_prods_v2(offspring[i], nprods_top, nprods_bot)
+    #     offspring_prods.append(prods)
+        
+    #     # Compare all combinations of pressure rods to see if there are 
+    #     # any distances less than the .ctc parameter
+    #     combos = []
+    #     for r in range(len(prods)):
+    #         combos.extend(itertools.combinations(prods,2))
+        
+    #     printflag = False
+    #     for combo in combos:
+    #         dist = constraints.centroid_distance(combo[0].tip, combo[1].tip)
+    #         if dist < combo[0].ctc or dist < combo[1].ctc:
+    #             print(f"Pressure rods found that are too close together - offspring {i}")
+    #             printflag = True
+    #             break
+        
+    #     if printflag is True:
+    #         title = f"Offspring {i}"
+    #         constraints.plot_prods_top_constraints(prods, top_constraints, title)
     
+    
+    # Plot all offspring and save
+    
+    return offspring_prods
+
+def mutation_test(pop, n_mutated, mutation_rate, nprods_top, nprods_bot, top_constraints, bot_constraints, all_on, on_prob, rod_type):
+    offspring = optimize.mutation(pop, n_mutated, mutation_rate, nprods_top, nprods_bot, top_constraints, bot_constraints, all_on, on_prob, rod_type)
+    offspring_prods = check_offspring(offspring)
+    return offspring_prods
+
+def local_search_test(pop, n_searched, localsearch_rate, on_prob, perturbrate, maxmag, typerate, nprods_top, nstandoffs, top_constraints, bot_constraints, all_on, rod_type):
+    offspring = optimize.local_search(pop, n_searched, localsearch_rate, on_prob, perturbrate, maxmag, typerate, nprods_top, nstandoffs, top_constraints, bot_constraints, all_on, rod_type)
+    offspring_prods = check_offspring(offspring)
+    return offspring_prods
+    
+    
+def check_offspring(offspring):
     offspring_shape = offspring.shape
     offspring_prods = []
     for i in range(offspring.shape[0]):
@@ -105,10 +147,10 @@ if __name__ == "__main__":
     # Parameters
     print("Setting genetic algorithm parameters")
     pop_size = 20              # initial number of chromosomes
-    rate_crossover = 150         # number of chromosomes that we apply crossover to
-    rate_mutation = 9         # number of chromosomes that we apply mutation to
+    rate_crossover = 20         # number of chromosomes that we apply crossover to
+    rate_mutation = 20         # number of chromosomes that we apply mutation to
     chance_mutation = 0.2       # normalized percent chance that an individual pressure rod will be mutated
-    n_searched = 9              # number of chromosomes that we apply local_search to
+    n_searched = 20              # number of chromosomes that we apply local_search to
     chance_localsearch = 0.2
     on_prob_initial = 0.5   # Initial percentage chance that a pressure rod will be on (only in the initial population)
     on_prob = 0.8           # Likelihood an "off" pressure rod will be switched on
@@ -133,10 +175,6 @@ if __name__ == "__main__":
     else:
         nprods_top = int(nprods_top_input)
         print(f"New value of {nprods_top} accepted.")
-    # nprods = 40
-    # nprods = nprods_small
-    # nprods = len(df_PressureRods)
-    # nprods = np.max([len(df_PressureRods), nprods_small, nprods_large])
     
     design_accepted = False     # Flag for deciding whether to end optimization early if criteria are met
     
@@ -147,8 +185,7 @@ if __name__ == "__main__":
     #              'Press-Fit Flat',
     #              '3.325" Tapered',
     #              '3.325" Flat']
-    pop = constraints.initialize_population_simple_v2(pop_size, nprods_top, nprods_bot, top_constraints, bot_constraints, all_on, on_prob, rod_type)    # initial parents population P
-    # pop = constraints.initialize_population_simple(pop_size, nprods, pBoards, pComponentsTop, df_Probes, pBoards_diff, all_on, on_prob_initial, rod_type)    # initial parents population P
+    pop = constraints.initialize_population_simple_v3(pop_size, nprods_top, nprods_bot, top_constraints, bot_constraints, all_on, on_prob, rod_type)
     pop = np.asarray(pop)
     
     
@@ -163,4 +200,13 @@ if __name__ == "__main__":
     # Testing crossover for pressure rods that end up too close to a component
     # or to another pressure rod
     print("\n\nTesting crossover")
-    crossover_test(pop, rate_crossover, nprods_top, nprods_bot, top_constraints, bot_constraints)
+    offspring_crossover = crossover_test(pop, rate_crossover, nprods_top, nprods_bot, top_constraints, bot_constraints)
+    
+    # Testing mutation
+    print("\n\nTesting mutation")
+    offspring_mutation = mutation_test(pop, rate_mutation, chance_mutation, nprods_top, nprods_bot, top_constraints, bot_constraints, all_on, on_prob, rod_type)
+    
+    # Testing local search
+    print("\n\nTesting local search")
+    offspring_local_search = local_search_test(pop, n_searched, chance_localsearch, on_prob, perturbrate, maxmag, typerate, nprods_top, nprods_bot, top_constraints, bot_constraints, all_on, rod_type)
+    
