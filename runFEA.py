@@ -147,7 +147,7 @@ def find_latest_folder_with_substring(base_dir, substring):
 
     return latest_folder
 
-def resultsToDataframe(inputfile):
+def resultsToDataframe_mesh(inputfile):
     """
     Get the output MeshNodes.csv data associated with the chosen input file
     and convert it to a Pandas dataframe for processing.
@@ -178,7 +178,7 @@ def resultsToDataframe(inputfile):
     return df
 
 
-def resultsToDataframe_v2(inputfile):
+def resultsToDataframe_report(inputfile):
     """
     Get the output FEAReport.csv data associated with the chosen input file and
     convert it to a Pandas dataframe for processing.
@@ -244,8 +244,109 @@ def getFitness(dfmesh):
     principalStrain_max = absmax["principalStrain_max"]
     return strain_xx, strain_yy, strain_xy, principalStrain_min, principalStrain_max
 
+def getFitness_meshmax(dfmesh):
+    """
+    Get the design fitness parameters using the maximum absolute value of the
+    mesh strain. MUST use data from FEA_MeshNodes.csv.
+
+    Parameters
+    ----------
+    dfmesh : Pandas dataframe
+        Dataframe of the FEA_Meshnodes.csv output.
+
+    Returns
+    -------
+    strain_xx : float
+        Maximum magnitude of strain in the x direction.
+    strain_yy : float
+        Maximum magnitude of strain in the y direction.
+    strain_xy : float
+        Maximum magnitude of shear strain.
+    principalStrain_min : float
+        Maximum magnitude of minimum principal strain.
+    principalStrain_max : float
+        Maximum magnitude of maximum principal strain.
+
+    """
+    absmax = dfmesh.abs().max()
+    strain_xx = absmax["strain_xx"]
+    strain_yy = absmax["strain_yy"]
+    strain_xy = absmax["strain_xy"]
+    
+    principalStrain_min = absmax["principalStrain_min"]
+    principalStrain_max = absmax["principalStrain_max"]
+    return strain_xx, strain_yy, strain_xy, principalStrain_min, principalStrain_max
+
+def getFitness_meshmean(dfmesh):
+    """
+    Get the design fitness parameters using the mean absolute value of the
+    mesh strain. MUST use data from FEA_MeshNodes.csv.
+
+    Parameters
+    ----------
+    dfmesh : Pandas dataframe
+        Dataframe of the FEA_Meshnodes.csv output.
+
+    Returns
+    -------
+    strain_xx : float
+        Mean magnitude of strain in the x direction.
+    strain_yy : float
+        Mean magnitude of strain in the y direction.
+    strain_xy : float
+        Mean magnitude of shear strain.
+    principalStrain_min : float
+        Mean magnitude of minimum principal strain.
+    principalStrain_max : float
+        Mean magnitude of maximum principal strain.
+
+    """
+    absmean = dfmesh.abs().mean()
+    strain_xx = absmean["strain_xx"]
+    strain_yy = absmean["strain_yy"]
+    strain_xy = absmean["strain_xy"]
+    
+    principalStrain_min = absmean["principalStrain_min"]
+    principalStrain_max = absmean["principalStrain_max"]
+    return strain_xx, strain_yy, strain_xy, principalStrain_min, principalStrain_max
+
 
 def getFitness_v2(dfreport):
+    """
+    Get the design fitness parameters using the maximum magnitude value found
+    in FEAReport.csv.
+
+    Parameters
+    ----------
+    dfreport : Pandas dataframe
+        Dataframe of the FEAReport.csv output.
+
+    Returns
+    -------
+    strain_xx : float
+        Maximum magnitude of strain in the x direction.
+    strain_yy : float
+        Maximum magnitude of strain in the y direction.
+    strain_xy : float
+        Maximum magnitude of shear strain.
+    principalStrain_min : float
+        Maximum magnitude of minimum principal strain.
+    principalStrain_max : float
+        Maximum magnitude of maximum principal strain.
+
+    """
+    dfreport.set_index('Row', inplace=True)
+    strain_xx = np.max([np.abs(dfreport.loc['horizontalStrain_max','Value']),
+                        np.abs(dfreport.loc['horizontalStrain_min','Value'])])
+    strain_yy = np.max([np.abs(dfreport.loc['verticalStrain_max','Value']),
+                        np.abs(dfreport.loc['verticalStrain_min','Value'])])
+    strain_xy = np.max([np.abs(dfreport.loc['shearStrain_max','Value']),
+                        np.abs(dfreport.loc['shearStrain_min','Value'])])
+    principalStrain_min = np.abs(dfreport.loc['principalStrain_max','Value'])
+    principalStrain_max = np.abs(dfreport.loc['principalStrain_min','Value'])
+    return strain_xx, strain_yy, strain_xy, principalStrain_min, principalStrain_max
+
+def getFitness_reportmax(dfreport):
     """
     Get the design fitness parameters using the maximum magnitude value found
     in FEAReport.csv.
