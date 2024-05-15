@@ -2059,8 +2059,10 @@ def read_FEA_results_blend(root, inputfile, gen, iteration, maxgen):
     dfreport = runFEA.resultsToDataframe_report(new_path)
     dfmesh = runFEA.resultsToDataframe_mesh(new_path)
     
+    # To blend objective definitions, choose getFitness_reportmax and only one of the getFitness_mesh*** methods
     strain_xx_report, strain_yy_report, strain_xy_report, principalStrain_min_report, principalStrain_max_report = runFEA.getFitness_reportmax(dfreport)
-    strain_xx_mesh, strain_yy_mesh, strain_xy_mesh, principalStrain_min_mesh, principalStrain_max_mesh = runFEA.getFitness_meshmax(dfmesh)
+    # strain_xx_mesh, strain_yy_mesh, strain_xy_mesh, principalStrain_min_mesh, principalStrain_max_mesh = runFEA.getFitness_meshmax(dfmesh)
+    strain_xx_mesh, strain_yy_mesh, strain_xy_mesh, principalStrain_min_mesh, principalStrain_max_mesh = runFEA.getFitness_meshmean(dfmesh)
     
     results_report = (strain_xx_report, strain_yy_report, strain_xy_report, principalStrain_min_report, principalStrain_max_report)
     results_mesh = (strain_xx_mesh, strain_yy_mesh, strain_xy_mesh, principalStrain_min_mesh, principalStrain_max_mesh)
