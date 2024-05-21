@@ -990,7 +990,7 @@ def evaluation(pop, gen, maxgen, nprods_top, nprods_bot, inputfile, constraint_g
     fitness_report = np.array(results_report_all)
     fitness_mesh = np.array(results_mesh_all)
     
-    return fitness_values
+    return fitness_values, fitness_report, fitness_mesh
 
 
 def is_folder_created_after_input_time(folder_name, input_time):
@@ -1234,7 +1234,7 @@ def main_optimization():
     maximum_generation = 15    # number of iterations
     # nobjs = 5
     
-    end_early = True
+    end_early = False
     # FIXME: Add ability to pickle the variables needed to continue an optimization later
     
     # nprods = 64
@@ -1291,7 +1291,7 @@ def main_optimization():
         print(f'Population size after local search:\t{pop.shape[0]}')
         
         print("Evaluating fitnesses...")
-        fitness_values = evaluation(pop, i, maximum_generation, nprods_top, nstandoffs, inputfile, constraint_geom, all_on, on_prob, rod_type)
+        fitness_values, fitness_report, fitness_mesh = evaluation(pop, i, maximum_generation, nprods_top, nstandoffs, inputfile, constraint_geom, all_on, on_prob, rod_type)
         fitness_values_temp = copy.deepcopy(fitness_values)
         genvals = i*np.ones((fitness_values_temp.shape[0],1))
         fitness_values_temp = np.append(fitness_values_temp, genvals, axis=1) # Add the generation number as a column for later referencing
@@ -1364,18 +1364,24 @@ def main_optimization():
         # 500 microstrain, then end the optimization early
         if not design_accepted:
             # Check if any row contains only values less than the threshold
-            condition = np.all(fitness_values < 500, axis=1)
+            condition = np.all(fitness_report < 500, axis=1)
+            # condition = np.all(fitness_values < 500, axis=1)
             # Get the row indices where the condition is true
             indices = np.where(condition)[0]
             if len(indices) > 0:
                 print("\nDesign found that meets minimum standard for strain:")
                 for index in indices:
                     print(f"\nDesign {index}:")
-                    print(f"Strain xx:\t{fitness_values[index][0]}")
-                    print(f"Strain yy:\t{fitness_values[index][1]}")
-                    print(f"Strain xy:\t{fitness_values[index][2]}")
-                    print(f"Principal strain min:\t{fitness_values[index][3]}")
-                    print(f"Principal strain max:\t{fitness_values[index][4]}")
+                    print(f"Strain xx:\t{fitness_report[index][0]}")
+                    print(f"Strain yy:\t{fitness_report[index][1]}")
+                    print(f"Strain xy:\t{fitness_report[index][2]}")
+                    print(f"Principal strain min:\t{fitness_report[index][3]}")
+                    print(f"Principal strain max:\t{fitness_report[index][4]}")
+                    # print(f"Strain xx:\t{fitness_values[index][0]}")
+                    # print(f"Strain yy:\t{fitness_values[index][1]}")
+                    # print(f"Strain xy:\t{fitness_values[index][2]}")
+                    # print(f"Principal strain min:\t{fitness_values[index][3]}")
+                    # print(f"Principal strain max:\t{fitness_values[index][4]}")
                 
                 while True:
                     if end_early == True:
