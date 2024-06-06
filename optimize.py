@@ -21,6 +21,7 @@ from shapely.geometry import Point
 from shapely.ops import nearest_points
 import plotly.express as px
 import itertools
+from itertools import permutations
 
 # MINIMIZATION
 
@@ -858,7 +859,6 @@ def local_search(pop, n_searched, localsearch_rate, on_prob, perturbrate, maxmag
 
 # Calculate fitness (obj function) values for each chromosome/solution
 def evaluation(pop, gen, maxgen, nprods_top, nprods_bot, inputfile, constraint_geom, all_on, on_prob, rod_type):
-# def evaluation(pop, nobjs, gen, nprods_top, nprods_bot, inputfile, constraint_geom, all_on, on_prob, rod_type):
     """
     Run FEA on the current generation and retrieve the results.
 
@@ -990,6 +990,12 @@ def evaluation(pop, gen, maxgen, nprods_top, nprods_bot, inputfile, constraint_g
     fitness_report = np.array(results_report_all)
     fitness_mesh = np.array(results_mesh_all)
     
+    # ###########################################
+    # # Try using only the first three objectives
+    # fitness_values = fitness_values[:,0:3]
+    # fitness_report = fitness_report[:,0:3]
+    # fitness_mesh = fitness_mesh[:,0:3]
+    
     return fitness_values, fitness_report, fitness_mesh
 
 
@@ -1041,7 +1047,8 @@ def crowding_calculation(fitness_values):
 
     """
     pop_size = len(fitness_values[:, 0])
-    fitness_value_number = len(fitness_values[0, :])                    # == n of objective functions
+    fitness_value_number = 3                    # == n of objective functions
+    # fitness_value_number = len(fitness_values[0, :])                    # == n of objective functions
     matrix_for_crowding = np.zeros((pop_size, fitness_value_number))
     normalized_fitness_values = (fitness_values - fitness_values.min(0))/fitness_values.ptp(0)  # arr.ptp(0) array of max elem in each col
     
@@ -1126,7 +1133,8 @@ def pareto_front_finding(fitness_values, pop_index):
     pareto_front = np.ones(pop_size, dtype=bool)    # all True initially
     for i in range(pop_size):
         for j in range(pop_size):
-            if all(fitness_values[j] <= fitness_values[i]) and any(fitness_values[j] < fitness_values[i]):
+            if all(fitness_values[j,0:3] <= fitness_values[i,0:3]) and any(fitness_values[j,0:3] < fitness_values[i,0:3]):
+            # if all(fitness_values[j] <= fitness_values[i]) and any(fitness_values[j] < fitness_values[i]):
                 pareto_front[i] = 0 # i is not in pareto front because j dominates i
                 break
 
@@ -1176,6 +1184,19 @@ def selection(pop, fitness_values, pop_size):
 
     return selected_pop     # arr(pop_size x n_var)
 
+def get_population_diversity(pop):
+    # Calculate population diversity by getting the average difference between 
+    # chromosomes, where the difference between chromosomes is the sum of the
+    # absolute values of the differences of all genes.
+    nelements = int(pop.shape[1]/4)
+    indices = list(range(len(pop)))
+    combos = list(permutations(indices, 2))
+    diversities = np.zeros(len(combos))
+    for i,combo in enumerate(combos):
+        # diversities[i] = np.sum(abs(pop[combo[0]] - pop[combo[1]]))
+        diversities[i] = np.sum(abs(pop[combo[0]] - pop[combo[1]]))/nelements
+    return np.mean(diversities)
+
 def main_optimization():
     """
     Main function for running optimization.
@@ -1217,15 +1238,16 @@ def main_optimization():
     
     # # Estimate a number of pressure rods for the top side that would make sense
     nprods_small, nprods_large = constraints.grid_nprods_v2(pBoards_diff_top) # FIXME: Need to make this consider bottom side pressure rods
+    nstandoffs_small, nstandoffs_large = constraints.grid_nprods_v2(pBoards_diff_bot) # This assumes large or small circle sizes, not the sizes associated with standoffs
     
     # Parameters
     print("Setting genetic algorithm parameters")
-    pop_size = 30              # initial number of chromosomes
-    rate_crossover = 30         # number of chromosomes that we apply crossover to
-    rate_mutation = 30         # number of chromosomes that we apply mutation to
-    chance_mutation = 0.3       # normalized percent chance that an individual pressure rod will be mutated
-    n_searched = 30             # number of chromosomes that we apply local_search to
-    chance_localsearch = 0.3
+    pop_size = 20              # initial number of chromosomes
+    rate_crossover = 36         # number of chromosomes that we apply crossover to
+    rate_mutation = 12         # number of chromosomes that we apply mutation to
+    chance_mutation = 0.2       # normalized percent chance that an individual pressure rod will be mutated
+    n_searched = 12             # number of chromosomes that we apply local_search to
+    chance_localsearch = 0.2
     on_prob_initial = 0.5   # Initial percentage chance that a pressure rod will be on (only in the initial population)
     on_prob = 0.8           # Likelihood an "off" pressure rod will be switched on
     perturbrate = 1.0
@@ -1234,11 +1256,11 @@ def main_optimization():
     maximum_generation = 15    # number of iterations
     # nobjs = 5
     
-    end_early = False
+    end_early = True
     # FIXME: Add ability to pickle the variables needed to continue an optimization later
     
     # nprods = 64
-    nprods_top = 64
+    nprods_top = 10
     nstandoffs = 10
     print(f"nprods_small = {nprods_small}")
     print(f"nprods_large = {nprods_large}")
@@ -1249,6 +1271,14 @@ def main_optimization():
     else:
         nprods_top = int(nprods_top_input)
         print(f"New value of {nprods_top} accepted.")
+    
+    nstandoffs_input = input(f"\nCurrent nstandoffs: {nstandoffs}\n If this quantity is adequate press enter. Otherwise choose an integer value and press enter.\n")
+    if len(nstandoffs_input) == 0:
+        print(f"\nCurrent value of {nstandoffs} accepted.")
+        pass
+    else:
+        nstandoffs = int(nstandoffs_input)
+        print(f"New value of {nstandoffs} accepted.")
     
     design_accepted = False     # Flag for deciding whether to end optimization early if criteria are met
     
@@ -1272,9 +1302,10 @@ def main_optimization():
     best_fitnesses_1 = []
     best_fitnesses_2 = []
     best_fitnesses_3 = []
-    best_fitnesses_4 = []
+    # best_fitnesses_4 = []
     best_overall_fitnesses = []
     
+    last_diversity = 0
     # NSGA-II main loop
     for i in range(maximum_generation):
         print('\n\nGeneration:', i)
@@ -1289,6 +1320,32 @@ def main_optimization():
         print(f'Population size after mutation:\t{pop.shape[0]}')
         pop = np.append(pop, offspring_from_local_search, axis=0)
         print(f'Population size after local search:\t{pop.shape[0]}')
+        
+        # Evaluate population diversity here to decide whether to change chance_mutation and chance_localsearch going forward
+        avg_diversity = get_population_diversity(pop)
+        diversity_sensitivity = 0.2
+        chance_mutation_step = 0.2
+        chance_localsearch_step = 0.2
+        if i==0:
+            last_diversity = avg_diversity
+        if avg_diversity < last_diversity-diversity_sensitivity:
+            print(f'Previous diversity:\t{last_diversity}')
+            print(f'Current diversity:\t{avg_diversity}')
+            # Adjust factors that will increase diversity
+            # rate_crossover = 9         # number of chromosomes that we apply crossover to
+            # rate_mutation = 3         # number of chromosomes that we apply mutation to
+            if chance_mutation < 1-chance_mutation_step:
+                chance_mutation += chance_mutation_step       # normalized percent chance that an individual pressure rod will be mutated
+            # n_searched = 3             # number of chromosomes that we apply local_search to
+            if chance_localsearch < 1-chance_localsearch_step:
+                chance_localsearch += chance_localsearch_step
+            # on_prob_initial = 0.5   # Initial percentage chance that a pressure rod will be on (only in the initial population)
+            # on_prob = 0.8           # Likelihood an "off" pressure rod will be switched on
+            # perturbrate = 1.0
+            maxmag += 0.5             # coordinate displacement during local_search
+            # typerate = 0.1
+            
+        last_diversity = avg_diversity
         
         print("Evaluating fitnesses...")
         fitness_values, fitness_report, fitness_mesh = evaluation(pop, i, maximum_generation, nprods_top, nstandoffs, inputfile, constraint_geom, all_on, on_prob, rod_type)
@@ -1309,8 +1366,8 @@ def main_optimization():
         best_fitnesses_2.append(fitness_values[j,:])
         j = fitness_values[:,2].argmin()
         best_fitnesses_3.append(fitness_values[j,:])
-        j = fitness_values[:,3].argmin()
-        best_fitnesses_4.append(fitness_values[j,:])
+        # j = fitness_values[:,3].argmin()
+        # best_fitnesses_4.append(fitness_values[j,:])
         
         # Save the best overal fitness design (sum of all objectives) for each
         # generation
@@ -1325,7 +1382,10 @@ def main_optimization():
         print(f'Population size after selection:\t{pop.shape[0]}')
         # pop = selection(pop, fitness_values, pop_size + rate_crossover + rate_mutation + n_searched)  # we arbitrarily set desired pareto front size = pop_size
         if i == 0:
-            maxlim = min(np.max(fitness_values),10000)
+            if np.max(fitness_values) > 10000:
+                maxlim = np.max(fitness_values)
+            else:
+                maxlim = min(np.max(fitness_values),10000)
         fig,ax = plt.subplots(dpi=300)
         for j in range(len(pop)):
             x1 = fitness_values[j][0]
@@ -1419,7 +1479,7 @@ def main_optimization():
     best_fitnesses_1 = np.asarray(best_fitnesses_1)
     best_fitnesses_2 = np.asarray(best_fitnesses_2)
     best_fitnesses_3 = np.asarray(best_fitnesses_3)
-    best_fitnesses_4 = np.asarray(best_fitnesses_4)
+    # best_fitnesses_4 = np.asarray(best_fitnesses_4)
     # plt.figure(dpi=300)
     # plt.scatter(fitness_values[:, 0],fitness_values[:, 1], label='Pareto optimal front')
     # plt.scatter(best_fitnesses_1[:,0],best_fitnesses_1[:,1], label="Optimal objective 1")
@@ -1433,8 +1493,8 @@ def main_optimization():
     
     end_time = time.time()
     
-    print(f"\n\nSetup time:\t{end_setup_time-start_time}")
-    print(f"Total elapsed time:\t{end_time-start_time}")
+    print(f"\n\nSetup time:\t{(end_setup_time-start_time)/60} minutes")
+    print(f"Total elapsed time:\t{(end_time-start_time)/3600} hours")
     
     # # Plot the best fitnesses per parameter for each generation (not
     # # necessarily from the same design)

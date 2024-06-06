@@ -2059,10 +2059,13 @@ def read_FEA_results_blend(root, inputfile, gen, iteration, maxgen):
     dfreport = runFEA.resultsToDataframe_report(new_path)
     dfmesh = runFEA.resultsToDataframe_mesh(new_path)
     
+    npts = 200
+    
     # To blend objective definitions, choose getFitness_reportmax and only one of the getFitness_mesh*** methods
     strain_xx_report, strain_yy_report, strain_xy_report, principalStrain_min_report, principalStrain_max_report = runFEA.getFitness_reportmax(dfreport)
     # strain_xx_mesh, strain_yy_mesh, strain_xy_mesh, principalStrain_min_mesh, principalStrain_max_mesh = runFEA.getFitness_meshmax(dfmesh)
-    strain_xx_mesh, strain_yy_mesh, strain_xy_mesh, principalStrain_min_mesh, principalStrain_max_mesh = runFEA.getFitness_meshmean(dfmesh)
+    strain_xx_mesh, strain_yy_mesh, strain_xy_mesh, principalStrain_min_mesh, principalStrain_max_mesh = runFEA.getFitness_meshsum(dfmesh, npts)
+    # strain_xx_mesh, strain_yy_mesh, strain_xy_mesh, principalStrain_min_mesh, principalStrain_max_mesh = runFEA.getFitness_meshmean(dfmesh)
     
     results_report = (strain_xx_report, strain_yy_report, strain_xy_report, principalStrain_min_report, principalStrain_max_report)
     results_mesh = (strain_xx_mesh, strain_yy_mesh, strain_xy_mesh, principalStrain_min_mesh, principalStrain_max_mesh)
@@ -2081,15 +2084,15 @@ def read_FEA_results_blend(root, inputfile, gen, iteration, maxgen):
     #     wt_report = 0
     #     wt_mesh = 1
     
-    # Logistic function
-    k = 1
-    x0 = maxgen/2
-    wt_report = 1/(1 + np.exp(-k*(gen - x0)))
-    wt_mesh = 1 - wt_report
+    # # Logistic function
+    # k = 1
+    # x0 = maxgen/2
+    # wt_report = 1/(1 + np.exp(-k*(gen - x0)))
+    # wt_mesh = 1 - wt_report
     
-    # # Choose only one type
-    # wt_report = 0
-    # wt_mesh = 1
+    # Choose only one type
+    wt_report = 0
+    wt_mesh = 1
     
     strain_xx_blend = wt_report * strain_xx_report + wt_mesh * strain_xx_mesh
     strain_yy_blend = wt_report * strain_yy_report + wt_mesh * strain_yy_mesh
@@ -2316,6 +2319,25 @@ def design_to_xml_v2(valid_circles, tip_radii, drill_radii, top_radii, nprods_to
         
             for i,val in enumerate(vals):
                 rowlist[i].text = val
+    
+    # In the GuidePins section, turn off constraints for all but the first row
+    guidepins = root.find('.//table[@identifier="GuidePins"].//rows')
+    newguidepins = []
+    for i,guidepin in enumerate(guidepins):
+        splitguidepin = guidepin.text.split('|')
+        newguidepin = []
+        for j,ele in enumerate(splitguidepin):
+            if (i>0) and (j==18):
+                newguidepin.append('false')
+            else:
+                newguidepin.append(ele)
+        newguidepin = '|'.join(newguidepin)
+        newguidepins.append(newguidepin)
+    for i,guidepin in enumerate(guidepins):
+        if i==0:
+            continue
+        else:
+            guidepin.text = newguidepins[i]
     
     # Set the salesOrder field (used in naming the output folder) to include
     # generation and iteration numbers

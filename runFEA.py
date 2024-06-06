@@ -172,7 +172,8 @@ def resultsToDataframe_mesh(inputfile):
     # Get the most recently modified subdirectory that matches the needed substring from the inputfile
     latest_subdir = find_latest_folder_with_substring(directory, filename)
     
-    meshfile = latest_subdir + "\\FEA_MeshNodes.csv"
+    # meshfile = latest_subdir + "\\FEA_MeshNodes.csv"
+    meshfile = latest_subdir + "\\FEA_AllMeshNodes.csv"
     
     df = pd.read_csv(meshfile)
     return df
@@ -277,6 +278,46 @@ def getFitness_meshmax(dfmesh):
     principalStrain_max = absmax["principalStrain_max"]
     return strain_xx, strain_yy, strain_xy, principalStrain_min, principalStrain_max
 
+def getFitness_meshsum(dfmesh, npts):
+    """
+    Get the design fitness parameters using the maximum absolute value of the
+    mesh strain. MUST use data from FEA_MeshNodes.csv.
+
+    Parameters
+    ----------
+    dfmesh : Pandas dataframe
+        Dataframe of the FEA_Meshnodes.csv output.
+
+    Returns
+    -------
+    strain_xx : float
+        Maximum magnitude of strain in the x direction.
+    strain_yy : float
+        Maximum magnitude of strain in the y direction.
+    strain_xy : float
+        Maximum magnitude of shear strain.
+    principalStrain_min : float
+        Maximum magnitude of minimum principal strain.
+    principalStrain_max : float
+        Maximum magnitude of maximum principal strain.
+
+    """
+    dfmesh_copy = dfmesh.copy()
+    dfmesh_copy = dfmesh_copy.abs()
+    
+    strain_xx = dfmesh_copy.nlargest(npts, columns='strain_xx').sum()['strain_xx']
+    strain_yy = dfmesh_copy.nlargest(npts, columns='strain_yy').sum()['strain_yy']
+    strain_xy = dfmesh_copy.nlargest(npts, columns='strain_xy').sum()['strain_xy']
+    principalStrain_min = dfmesh_copy.nlargest(npts, columns='principalStrain_min').sum()['principalStrain_min']
+    principalStrain_max = dfmesh_copy.nlargest(npts, columns='principalStrain_max').sum()['principalStrain_max']
+    # strain_xx = abssum["strain_xx"]
+    # strain_yy = abssum["strain_yy"]
+    # strain_xy = abssum["strain_xy"]
+    
+    # principalStrain_min = abssum["principalStrain_min"]
+    # principalStrain_max = abssum["principalStrain_max"]
+    return strain_xx, strain_yy, strain_xy, principalStrain_min, principalStrain_max
+
 def getFitness_meshmean(dfmesh):
     """
     Get the design fitness parameters using the mean absolute value of the
@@ -308,6 +349,39 @@ def getFitness_meshmean(dfmesh):
     
     principalStrain_min = absmean["principalStrain_min"]
     principalStrain_max = absmean["principalStrain_max"]
+    return strain_xx, strain_yy, strain_xy, principalStrain_min, principalStrain_max
+
+def getFitness_meshmedian(dfmesh):
+    """
+    Get the design fitness parameters using the median absolute value of the
+    mesh strain. MUST use data from FEA_MeshNodes.csv.
+
+    Parameters
+    ----------
+    dfmesh : Pandas dataframe
+        Dataframe of the FEA_Meshnodes.csv output.
+
+    Returns
+    -------
+    strain_xx : float
+        Mean magnitude of strain in the x direction.
+    strain_yy : float
+        Mean magnitude of strain in the y direction.
+    strain_xy : float
+        Mean magnitude of shear strain.
+    principalStrain_min : float
+        Mean magnitude of minimum principal strain.
+    principalStrain_max : float
+        Mean magnitude of maximum principal strain.
+
+    """
+    absmedian = dfmesh.abs().median()
+    strain_xx = absmedian["strain_xx"]
+    strain_yy = absmedian["strain_yy"]
+    strain_xy = absmedian["strain_xy"]
+    
+    principalStrain_min = absmedian["principalStrain_min"]
+    principalStrain_max = absmedian["principalStrain_max"]
     return strain_xx, strain_yy, strain_xy, principalStrain_min, principalStrain_max
 
 
