@@ -1216,7 +1216,7 @@ def grid_nprods_v2(pBoards_diff):
 #     return chromosome
 
 
-def create_chromosome_v3(nprods_top, nstandoffs, top_constraints, bot_constraints, all_on=False, on_prob=0.5, rod_type="All"):
+def create_chromosome_v3(nprods_top, nstandoffs, top_constraints, bot_constraints, all_on=False, on_prob=0.5, rod_type="All", standoff_dist=None):
     # Initialize random chromosome, where the first ncircles entries are
     # the x coordinates, the next ncircles entries are y coordinates, then
     # radii, on/off binary values, and then the side of the board that the
@@ -1539,8 +1539,204 @@ def create_chromosome_v3(nprods_top, nstandoffs, top_constraints, bot_constraint
                 
         return chromosome_x, chromosome_y, chromosome_rod_type, chromosome_on
     
+    
+    def place_standoffs(nprods, sidenum, pBoards_multi, side_probes, sidecomponents, chromosome_x_top, chromosome_y_top, standoff_dist):
+        chromosome_x = []
+        chromosome_y = []
+        chromosome_rod_type = []
+        chromosome_on = []
+        chromosome_side = []
+        prods_chosen = []
+        tries = 10
+        grid_tries = 10
+        
+        indices_used = []
+        
+        if all_on:
+            on = 1
+        else:
+            # on_prob = 0.5   # Percentage chance of a pressure rod being on initially
+            on_chance = random.uniform(0,1)
+            if on_prob >= on_chance:
+                on = 1
+            else:
+                on = 0
+        
+        while len(chromosome_x) < nprods:
+            valid = True
+            
+            while True:
+                ref_index = random.randint(0,len(chromosome_x_top)-1)
+                if ref_index in indices_used:
+                    continue
+                else:
+                    indices_used.append(ref_index)
+                    break
+            
+            xref = chromosome_x_top[ref_index]
+            yref = chromosome_y_top[ref_index]
+            
+            while True:
+                xmin_ref = max(xref-standoff_dist, xmin)
+                xmax_ref = min(xref+standoff_dist, xmax)
+                ymin_ref = max(yref-standoff_dist, ymin)
+                ymax_ref = min(yref+standoff_dist, ymax)
+                x = random.uniform(xmin_ref, xmax_ref)
+                y = random.uniform(ymin_ref, ymax_ref)
+                
+                xdiff = x - xref
+                ydiff = y - yref
+                
+                dist = np.sqrt(xdiff**2 + ydiff**2)
+                if dist <= standoff_dist:
+                    break
+            
+            prod = PressureRod(x,y,rod_types[4],on)
+            intersects_sidecomponents = False
+            intersects_sideprobes = False
+            intersects_botcomponents = False
+            intersects_sideprobes = False
+            centroids = []
+            perturbing = False
+            
+            # Make sure pressure rod is within the UUT and make sure it doesn't intersect any components, using the appropriate buffer sizes
+            if sidenum == 1:
+                if not pBoards_multi.contains(prod.tip):
+                # if not pBoards_multi.contains(prod.center):
+                # if not prod.center.intersects(pBoards_multi):
+                    continue
+            else:
+                if not pBoards_multi.contains(prod.tip_UUT_buffer):
+                # if not prod.tip_UUT_buffer.within(pBoards_multi):
+                    continue
+            
+            ### TRYING MOVING AWAY FROM INTERSECTION VIOLATIONS TO SALVAGE DESIGN ###
+            # Gather status of currently placed prod
+            if prod.tip_component_buffer.intersects(sidecomponents):
+                intersects_sidecomponents = True
+                intersection_sidecomponents = prod.tip_component_buffer.intersection(sidecomponents)
+                
+            if prod.tip_from_top_probe_buffer.intersects(side_probes):
+                intersects_sideprobes = True
+                intersection_sideprobes = prod.tip_from_top_probe_buffer.intersection(side_probes)
+            
+            # Parse the status of intersections
+            if not intersects_sidecomponents and not intersects_sideprobes:
+                pass
+            elif intersects_sidecomponents and not intersects_sideprobes:
+                perturbing = True
+                if intersection_sidecomponents.geom_type == "Polygon":
+                    centroids.append(intersection_sidecomponents.centroid)
+                else:
+                    for poly in intersection_sidecomponents.geoms:
+                        centroids.append(poly.centroid)
+            elif not intersects_sidecomponents and intersects_sideprobes:
+                perturbing = True
+                if intersection_sideprobes.geom_type == "Polygon":
+                    centroids.append(intersection_sideprobes.centroid)
+                else:
+                    for poly in intersection_sideprobes.geoms:
+                        centroids.append(poly.centroid)                    
+            else:
+                perturbing = True
+                # both side components and side probes are intersected by the current prod
+                if intersection_sidecomponents.geom_type == "Polygon":
+                    centroids.append(intersection_sidecomponents.centroid)
+                else:
+                    for poly in intersection_sidecomponents.geoms:
+                        centroids.append(poly.centroid)
+                        
+                if intersection_sideprobes.geom_type == "Polygon":
+                    centroids.append(intersection_sideprobes.centroid)
+                else:
+                    for poly in intersection_sideprobes.geoms:
+                        centroids.append(poly.centroid)            
+            
+            if perturbing:                    
+                centroids_x = [centroid.x for centroid in centroids]
+                centroids_y = [centroid.y for centroid in centroids]
+                
+                avg_x = np.mean(centroids_x)
+                avg_y = np.mean(centroids_y)
+                
+                diff_x = prod.x - avg_x
+                diff_y = prod.y - avg_y
+                
+                mag_diff = np.sqrt(diff_x**2 + diff_y**2)
+                
+                unit_x = diff_x / mag_diff
+                unit_y = diff_y / mag_diff
+                
+                # print("")
+                # print("-"*60)
+                # print("PERTURBING PROD AWAY FROM INTERSECTION")
+                
+                for i in range(tries):
+                    valid = True
+                    prodxmin, prodymin, prodxmax, prodymax = prod.tip_component_buffer.bounds
+                    stepsize = (prodxmax - prodxmin)/tries
+                    new_x = prod.x + unit_x*stepsize
+                    new_y = prod.y + unit_y*stepsize
+                    
+                    prod.update_pressure_rod(new_x, new_y, prod.rod_type, prod.on)
+                    
+                    # # Check for intersections on top side
+                    # if sidenum == 1:
+                    #     component_intersection_area = prod.tip_component_buffer.intersection(topcomponents).area
+                    #     probe_intersection_area = prod.tip_from_top_probe_buffer.intersection(top_probes).area
+                    # elif sidenum == 2:
+                    #     component_intersection_area = prod.tip_component_buffer.intersection(botcomponents).area
+                    #     probe_intersection_area = prod.tip_from_top_probe_buffer.intersection(bot_probes).area
+                    # else:
+                    #     raise ValueError("sidenum must be equal to 1 or 2")
+                    
+                    # print(f"\n{topcomponent_intersection_area} intersection with top components")
+                    # print(f"{top_probe_intersection_area} intersection with top probes")
+                    
+                    if not pBoards_multi.contains(prod.tip):
+                    # if not pBoards_multi.contains(prod.center):
+                    # if not prod.center.intersects(pBoards_multi):
+                        valid = False
+                        continue                
+                    if prod.tip_component_buffer.intersects(sidecomponents):
+                        valid = False
+                        continue
+                    if prod.tip_from_top_probe_buffer.intersects(side_probes):
+                        valid = False
+                        continue
+                    
+                    if valid == True:
+                        break
+                    
+            if not pBoards_multi.contains(prod.tip):
+            # if not pBoards_multi.contains(prod.center):
+            # if not prod.center.intersects(pBoards_multi):
+                valid = False
+                continue
+            
+            # Make sure pressure rod doesn't conflict with any previously-placed pressure rods
+            if len(prods_chosen) > 0:
+                for prod_chosen in prods_chosen:
+                    if prod_chosen.top.intersects(prod.top_from_top_probe_buffer):
+                        valid = False
+                        break
+                if valid == False:
+                    continue
+            
+            if valid == True:
+                prods_chosen.append(prod)
+                chromosome_x.append(prod.x)
+                chromosome_y.append(prod.y)
+                chromosome_rod_type.append(4)
+                chromosome_on.append(on)
+                
+        return chromosome_x, chromosome_y, chromosome_rod_type, chromosome_on
+    
     chromosome_x_top, chromosome_y_top, chromosome_rod_type_top, chromosome_on_top = place_pressure_rods(nprods_top, 1, pBoards_multi_top, top_probes, topcomponents)
-    chromosome_x_bot, chromosome_y_bot, chromosome_rod_type_bot, chromosome_on_bot = place_pressure_rods(nstandoffs, 2, pBoards_multi_bot, bot_probes, botcomponents)
+    if standoff_dist == None:
+        chromosome_x_bot, chromosome_y_bot, chromosome_rod_type_bot, chromosome_on_bot = place_pressure_rods(nstandoffs, 2, pBoards_multi_bot, bot_probes, botcomponents)
+    else:
+        chromosome_x_bot, chromosome_y_bot, chromosome_rod_type_bot, chromosome_on_bot = place_standoffs(nprods_top, 2, pBoards_multi_bot, bot_probes, botcomponents, chromosome_x_top, chromosome_y_top, standoff_dist)
     
     
     chromosome = []
@@ -1767,10 +1963,10 @@ def validate_prods(prods_chosen, top_constraints):
 #         print(f"Chromosome {i} of {npop} created")
 #     return initial_population
 
-def initialize_population_simple_v3(npop, nprods_top, nstandoffs, top_constraints, bot_constraints, all_on, on_prob, rod_type):
+def initialize_population_simple_v3(npop, nprods_top, nstandoffs, top_constraints, bot_constraints, all_on, on_prob, rod_type, standoff_dist):
     initial_population = []
     for i in range(npop):
-        initial_population.append(create_chromosome_v3(nprods_top, nstandoffs, top_constraints, bot_constraints, all_on, on_prob, rod_type))
+        initial_population.append(create_chromosome_v3(nprods_top, nstandoffs, top_constraints, bot_constraints, all_on, on_prob, rod_type, standoff_dist))
         print(f"Chromosome {i} of {npop} created")
     return initial_population
 
@@ -2063,8 +2259,8 @@ def read_FEA_results_blend(root, inputfile, gen, iteration, maxgen):
     
     # To blend objective definitions, choose getFitness_reportmax and only one of the getFitness_mesh*** methods
     strain_xx_report, strain_yy_report, strain_xy_report, principalStrain_min_report, principalStrain_max_report = runFEA.getFitness_reportmax(dfreport)
-    # strain_xx_mesh, strain_yy_mesh, strain_xy_mesh, principalStrain_min_mesh, principalStrain_max_mesh = runFEA.getFitness_meshmax(dfmesh)
-    strain_xx_mesh, strain_yy_mesh, strain_xy_mesh, principalStrain_min_mesh, principalStrain_max_mesh = runFEA.getFitness_meshsum(dfmesh, npts)
+    strain_xx_mesh, strain_yy_mesh, strain_xy_mesh, principalStrain_min_mesh, principalStrain_max_mesh = runFEA.getFitness_meshmax(dfmesh)
+    # strain_xx_mesh, strain_yy_mesh, strain_xy_mesh, principalStrain_min_mesh, principalStrain_max_mesh = runFEA.getFitness_meshsum(dfmesh, npts)
     # strain_xx_mesh, strain_yy_mesh, strain_xy_mesh, principalStrain_min_mesh, principalStrain_max_mesh = runFEA.getFitness_meshmean(dfmesh)
     
     results_report = (strain_xx_report, strain_yy_report, strain_xy_report, principalStrain_min_report, principalStrain_max_report)
@@ -2091,8 +2287,8 @@ def read_FEA_results_blend(root, inputfile, gen, iteration, maxgen):
     # wt_mesh = 1 - wt_report
     
     # Choose only one type
-    wt_report = 0
-    wt_mesh = 1
+    wt_report = 1
+    wt_mesh = 0
     
     strain_xx_blend = wt_report * strain_xx_report + wt_mesh * strain_xx_mesh
     strain_yy_blend = wt_report * strain_yy_report + wt_mesh * strain_yy_mesh

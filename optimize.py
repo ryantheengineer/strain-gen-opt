@@ -858,7 +858,7 @@ def local_search(pop, n_searched, localsearch_rate, on_prob, perturbrate, maxmag
     return offspring    # arr(loc_search_size x n_var)
 
 # Calculate fitness (obj function) values for each chromosome/solution
-def evaluation(pop, gen, maxgen, nprods_top, nprods_bot, inputfile, constraint_geom, all_on, on_prob, rod_type):
+def evaluation(pop, gen, maxgen, nprods_top, nprods_bot, inputfile, constraint_geom, all_on, on_prob, rod_type, standoff_dist):
     """
     Run FEA on the current generation and retrieve the results.
 
@@ -954,7 +954,7 @@ def evaluation(pop, gen, maxgen, nprods_top, nprods_bot, inputfile, constraint_g
         
         # If there are any failed FEA cases, generate new designs and run those
         if missing_iterations:
-            new_initial_population = constraints.initialize_population_simple_v3(len(missing_iterations), nprods_top, nprods_bot, top_constraints, bot_constraints, all_on, on_prob, rod_type)
+            new_initial_population = constraints.initialize_population_simple_v3(len(missing_iterations), nprods_top, nprods_bot, top_constraints, bot_constraints, all_on, on_prob, rod_type, standoff_dist)
             for ind, i in enumerate(missing_iterations):
                 chromosome_temp = new_initial_population[ind]
                 prods_temp = constraints.interpret_chromosome_to_prods_v2(chromosome_temp, nprods_top, nprods_bot)
@@ -1243,17 +1243,17 @@ def main_optimization():
     # Parameters
     print("Setting genetic algorithm parameters")
     pop_size = 20              # initial number of chromosomes
-    rate_crossover = 36         # number of chromosomes that we apply crossover to
-    rate_mutation = 12         # number of chromosomes that we apply mutation to
+    rate_crossover = 30         # number of chromosomes that we apply crossover to
+    rate_mutation = 20         # number of chromosomes that we apply mutation to
     chance_mutation = 0.2       # normalized percent chance that an individual pressure rod will be mutated
-    n_searched = 12             # number of chromosomes that we apply local_search to
+    n_searched = 20             # number of chromosomes that we apply local_search to
     chance_localsearch = 0.2
     on_prob_initial = 0.5   # Initial percentage chance that a pressure rod will be on (only in the initial population)
     on_prob = 0.8           # Likelihood an "off" pressure rod will be switched on
     perturbrate = 1.0
     maxmag = 1.0             # coordinate displacement during local_search
     typerate = 0.1
-    maximum_generation = 15    # number of iterations
+    maximum_generation = 24    # number of iterations
     # nobjs = 5
     
     end_early = True
@@ -1289,7 +1289,8 @@ def main_optimization():
     #              'Press-Fit Flat',
     #              '3.325" Tapered',
     #              '3.325" Flat']
-    pop = constraints.initialize_population_simple_v3(pop_size, nprods_top, nstandoffs, top_constraints, bot_constraints, all_on, on_prob, rod_type)    # initial parents population P
+    standoff_dist = None    # Can be a float value or None
+    pop = constraints.initialize_population_simple_v3(pop_size, nprods_top, nstandoffs, top_constraints, bot_constraints, all_on, on_prob, rod_type, standoff_dist)    # initial parents population P
     
     # # Plot the designs
     # for chromosome in pop:
@@ -1329,8 +1330,6 @@ def main_optimization():
         if i==0:
             last_diversity = avg_diversity
         if avg_diversity < last_diversity-diversity_sensitivity:
-            print(f'Previous diversity:\t{last_diversity}')
-            print(f'Current diversity:\t{avg_diversity}')
             # Adjust factors that will increase diversity
             # rate_crossover = 9         # number of chromosomes that we apply crossover to
             # rate_mutation = 3         # number of chromosomes that we apply mutation to
@@ -1345,10 +1344,12 @@ def main_optimization():
             maxmag += 0.5             # coordinate displacement during local_search
             # typerate = 0.1
             
+        print(f'Previous diversity:\t{last_diversity}')
+        print(f'Current diversity:\t{avg_diversity}')
         last_diversity = avg_diversity
         
         print("Evaluating fitnesses...")
-        fitness_values, fitness_report, fitness_mesh = evaluation(pop, i, maximum_generation, nprods_top, nstandoffs, inputfile, constraint_geom, all_on, on_prob, rod_type)
+        fitness_values, fitness_report, fitness_mesh = evaluation(pop, i, maximum_generation, nprods_top, nstandoffs, inputfile, constraint_geom, all_on, on_prob, rod_type, standoff_dist)
         fitness_values_temp = copy.deepcopy(fitness_values)
         genvals = i*np.ones((fitness_values_temp.shape[0],1))
         fitness_values_temp = np.append(fitness_values_temp, genvals, axis=1) # Add the generation number as a column for later referencing

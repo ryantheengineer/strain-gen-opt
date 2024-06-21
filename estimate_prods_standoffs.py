@@ -20,7 +20,7 @@ def objective(xs, top_constraints, bot_constraints, all_on, on_prob, rod_type):
     
     nprods = xs[0]
     nstandoffs = xs[1]
-    nsims = 3
+    nsims = 5
     objval = 0
     gen = 'setup'
     maxgen = 100
@@ -80,15 +80,15 @@ def SimAnneal(nprods, nprods_bounds, nstandoffs, nstandoffs_bounds, constraint_g
     # Select Ps, Pf, N, and calculate Ts, Tf, and F
     Ps = 0.3                # Probability of acceptance at start
     Pf = 0.00001             # Probability of acceptance at finish
-    N = 7                 # Number of cycles
+    N = 30                 # Number of cycles
 
     Ts = -1/np.log(Ps)      # Temperature at start
     Tf = -1/np.log(Pf)      # Temperature at finish
     F = (Tf/Ts)**(1/(N-1))  # Temperature reduction factor each cycle
 
     # Perturbation information
-    delta = 20               # Max perturbation
-    n = 4                   # Starting number of perturbations per cycle
+    delta = 10               # Max perturbation
+    n = 2                   # Starting number of perturbations per cycle
 
     # Holding variables
     dE = 0.0
@@ -103,10 +103,13 @@ def SimAnneal(nprods, nprods_bounds, nstandoffs, nstandoffs_bounds, constraint_g
 
     # Step through the cycles
     for i in range(N):
+        print('')
+        print('#'*60)
         print(f'\nCycle {i}')
         # Add the current objective value to the objective vector for plotting
         print(f'Calculating objective at current position:\t{xc}')
         objvals[i] = objective(xc, top_constraints, bot_constraints, all_on, on_prob, rod_type)
+        print(f'Fitness at current position:\t{objvals[i]}')
 
         # Step through the perturbations
         for j in range(n):
@@ -126,14 +129,19 @@ def SimAnneal(nprods, nprods_bounds, nstandoffs, nstandoffs_bounds, constraint_g
                     continue
                 elif xp[0] < xlb[0]:
                     continue
+                if xp[1] > xub[1]:
+                    continue
+                elif xp[1] < xlb[1]:
+                    continue
                 else:
                     break
 
             # print(xp)
 
             # Get the objective value at the perturbed point
-            print(f'Calculating objective at perturbed position:\t{xp}')
+            print(f'\nCalculating objective at perturbed position:\t{xp}')
             fp = objective(xp, top_constraints, bot_constraints, all_on, on_prob, rod_type)
+            print(f'Fitness at perturbed position:\t{fp}')
 
             # Calculate values for Boltzmann function in case they're needed
             dE = np.abs(fp - fc)
@@ -172,6 +180,7 @@ def SimAnneal(nprods, nprods_bounds, nstandoffs, nstandoffs_bounds, constraint_g
     return perturbations, objvals, xsearch
 
 if __name__ == '__main__':
+    start_time = time.time()
     constraint_geom = constraints.get_constraint_geometry()
     root = constraint_geom[0]
     inputfile = constraint_geom[1]
@@ -196,7 +205,7 @@ if __name__ == '__main__':
     
     all_on = True
     rod_type = 'Press-Fit Tapered'
-    on_prob = 0.8
+    on_prob = 0.5
     
     start_time = datetime.now()
     
@@ -240,7 +249,9 @@ if __name__ == '__main__':
     plt.annotate(best_annotation, (perturbations[best_ind], objvals[best_ind]), (mid_ind, 0.75*(np.max(objvals)-np.min(objvals))+np.min(objvals)), arrowprops=dict(facecolor='black', shrink = 0.01, width=0.5))
     plt.show()
 
-
+    end_time = time.time()
+    
+    print(f"Total elapsed time:\t{(end_time-start_time)/3600} hours")
 
 
 

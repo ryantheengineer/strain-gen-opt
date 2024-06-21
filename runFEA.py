@@ -93,7 +93,8 @@ def runFEA(FEApath, inputfile):
         occurred during solving.
 
     """
-    args = f'/input "{inputfile}" /noprogressbar'
+    # args = f'/input "{inputfile}" /noprogressbar'
+    args = f'/input "{inputfile}" /noprogressbar /skipplots'
     command = f'"{FEApath}" {args}'
     result = subprocess.run(command)
     if result.returncode == 0:
