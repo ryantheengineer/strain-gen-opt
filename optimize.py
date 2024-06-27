@@ -1289,12 +1289,12 @@ def main_optimization():
     #              'Press-Fit Flat',
     #              '3.325" Tapered',
     #              '3.325" Flat']
-    standoff_dist = None    # Can be a float value or None
+    standoff_dist = 0.1    # Can be a float value or None
     pop = constraints.initialize_population_simple_v3(pop_size, nprods_top, nstandoffs, top_constraints, bot_constraints, all_on, on_prob, rod_type, standoff_dist)    # initial parents population P
     
-    # # Plot the designs
-    # for chromosome in pop:
-    #     constraints.plot_chromosome(chromosome, top_constraints, bot_constraints, nprods_top, nstandoffs)
+    # Plot the designs
+    for chromosome in pop:
+        constraints.plot_chromosome(chromosome, top_constraints, bot_constraints, nprods_top, nstandoffs)
         
     pop = np.asarray(pop)
     print(f'Initial random population size:\t{pop.shape[0]}')

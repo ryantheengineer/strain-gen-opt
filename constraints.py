@@ -1565,6 +1565,7 @@ def create_chromosome_v3(nprods_top, nstandoffs, top_constraints, bot_constraint
         while len(chromosome_x) < nprods:
             valid = True
             
+            # Choose a pressure rod to which a standoff will be paired
             while True:
                 ref_index = random.randint(0,len(chromosome_x_top)-1)
                 if ref_index in indices_used:
@@ -1573,162 +1574,52 @@ def create_chromosome_v3(nprods_top, nstandoffs, top_constraints, bot_constraint
                     indices_used.append(ref_index)
                     break
             
+            if len(indices_used) == len(chromosome_x_top):
+                raise Exception('Max tries reached on more pressure rods than are available. Consider adjusting inputs.')
+            
             xref = chromosome_x_top[ref_index]
             yref = chromosome_y_top[ref_index]
             
-            while True:
-                xmin_ref = max(xref-standoff_dist, xmin)
-                xmax_ref = min(xref+standoff_dist, xmax)
-                ymin_ref = max(yref-standoff_dist, ymin)
-                ymax_ref = min(yref+standoff_dist, ymax)
-                x = random.uniform(xmin_ref, xmax_ref)
-                y = random.uniform(ymin_ref, ymax_ref)
+            # Create the beginning of the available area by creating a circle
+            # polygon with the necessary size to place the standoff in the
+            # allowable area
+            rcircle = standoff_dist + 0.15/2
+            circle = place_circle(xref, yref, rcircle)
+            
+            # Get the intersection of the circle with the UUT
+            circle_UUT = circle.intersection(pBoards_multi)
+            
+            # Get the difference of the circle with any bottom side probes
+            # (buffers accounted for)
+            circle_probes = circle_UUT.difference(side_probes.buffer(0.125))
+            
+            # Get the difference of the circle with any bottom side components
+            # (buffers accounted for)
+            circle_components = circle_probes.difference(sidecomponents.buffer(0.035))
+            
+            circle_bounds = circle_components.bounds    # (minx, miny, maxx, maxy)
+            
+            max_tries = 100
+            max_tries_reached = False
+            for i in range(max_tries):
+                x = random.uniform(circle_bounds[0], circle_bounds[2])
+                y = random.uniform(circle_bounds[1], circle_bounds[3])
                 
-                xdiff = x - xref
-                ydiff = y - yref
+                prod = PressureRod(x,y,rod_types[4],on)
                 
-                dist = np.sqrt(xdiff**2 + ydiff**2)
-                if dist <= standoff_dist:
+                if prod.tip.within(circle_components):
                     break
-            
-            prod = PressureRod(x,y,rod_types[4],on)
-            intersects_sidecomponents = False
-            intersects_sideprobes = False
-            intersects_botcomponents = False
-            intersects_sideprobes = False
-            centroids = []
-            perturbing = False
-            
-            # Make sure pressure rod is within the UUT and make sure it doesn't intersect any components, using the appropriate buffer sizes
-            if sidenum == 1:
-                if not pBoards_multi.contains(prod.tip):
-                # if not pBoards_multi.contains(prod.center):
-                # if not prod.center.intersects(pBoards_multi):
-                    continue
-            else:
-                if not pBoards_multi.contains(prod.tip_UUT_buffer):
-                # if not prod.tip_UUT_buffer.within(pBoards_multi):
-                    continue
-            
-            ### TRYING MOVING AWAY FROM INTERSECTION VIOLATIONS TO SALVAGE DESIGN ###
-            # Gather status of currently placed prod
-            if prod.tip_component_buffer.intersects(sidecomponents):
-                intersects_sidecomponents = True
-                intersection_sidecomponents = prod.tip_component_buffer.intersection(sidecomponents)
-                
-            if prod.tip_from_top_probe_buffer.intersects(side_probes):
-                intersects_sideprobes = True
-                intersection_sideprobes = prod.tip_from_top_probe_buffer.intersection(side_probes)
-            
-            # Parse the status of intersections
-            if not intersects_sidecomponents and not intersects_sideprobes:
-                pass
-            elif intersects_sidecomponents and not intersects_sideprobes:
-                perturbing = True
-                if intersection_sidecomponents.geom_type == "Polygon":
-                    centroids.append(intersection_sidecomponents.centroid)
-                else:
-                    for poly in intersection_sidecomponents.geoms:
-                        centroids.append(poly.centroid)
-            elif not intersects_sidecomponents and intersects_sideprobes:
-                perturbing = True
-                if intersection_sideprobes.geom_type == "Polygon":
-                    centroids.append(intersection_sideprobes.centroid)
-                else:
-                    for poly in intersection_sideprobes.geoms:
-                        centroids.append(poly.centroid)                    
-            else:
-                perturbing = True
-                # both side components and side probes are intersected by the current prod
-                if intersection_sidecomponents.geom_type == "Polygon":
-                    centroids.append(intersection_sidecomponents.centroid)
-                else:
-                    for poly in intersection_sidecomponents.geoms:
-                        centroids.append(poly.centroid)
-                        
-                if intersection_sideprobes.geom_type == "Polygon":
-                    centroids.append(intersection_sideprobes.centroid)
-                else:
-                    for poly in intersection_sideprobes.geoms:
-                        centroids.append(poly.centroid)            
-            
-            if perturbing:                    
-                centroids_x = [centroid.x for centroid in centroids]
-                centroids_y = [centroid.y for centroid in centroids]
-                
-                avg_x = np.mean(centroids_x)
-                avg_y = np.mean(centroids_y)
-                
-                diff_x = prod.x - avg_x
-                diff_y = prod.y - avg_y
-                
-                mag_diff = np.sqrt(diff_x**2 + diff_y**2)
-                
-                unit_x = diff_x / mag_diff
-                unit_y = diff_y / mag_diff
-                
-                # print("")
-                # print("-"*60)
-                # print("PERTURBING PROD AWAY FROM INTERSECTION")
-                
-                for i in range(tries):
-                    valid = True
-                    prodxmin, prodymin, prodxmax, prodymax = prod.tip_component_buffer.bounds
-                    stepsize = (prodxmax - prodxmin)/tries
-                    new_x = prod.x + unit_x*stepsize
-                    new_y = prod.y + unit_y*stepsize
+                if i == max_tries-1:
+                    max_tries_reached = True
                     
-                    prod.update_pressure_rod(new_x, new_y, prod.rod_type, prod.on)
-                    
-                    # # Check for intersections on top side
-                    # if sidenum == 1:
-                    #     component_intersection_area = prod.tip_component_buffer.intersection(topcomponents).area
-                    #     probe_intersection_area = prod.tip_from_top_probe_buffer.intersection(top_probes).area
-                    # elif sidenum == 2:
-                    #     component_intersection_area = prod.tip_component_buffer.intersection(botcomponents).area
-                    #     probe_intersection_area = prod.tip_from_top_probe_buffer.intersection(bot_probes).area
-                    # else:
-                    #     raise ValueError("sidenum must be equal to 1 or 2")
-                    
-                    # print(f"\n{topcomponent_intersection_area} intersection with top components")
-                    # print(f"{top_probe_intersection_area} intersection with top probes")
-                    
-                    if not pBoards_multi.contains(prod.tip):
-                    # if not pBoards_multi.contains(prod.center):
-                    # if not prod.center.intersects(pBoards_multi):
-                        valid = False
-                        continue                
-                    if prod.tip_component_buffer.intersects(sidecomponents):
-                        valid = False
-                        continue
-                    if prod.tip_from_top_probe_buffer.intersects(side_probes):
-                        valid = False
-                        continue
-                    
-                    if valid == True:
-                        break
-                    
-            if not pBoards_multi.contains(prod.tip):
-            # if not pBoards_multi.contains(prod.center):
-            # if not prod.center.intersects(pBoards_multi):
-                valid = False
+            if max_tries_reached:
                 continue
             
-            # Make sure pressure rod doesn't conflict with any previously-placed pressure rods
-            if len(prods_chosen) > 0:
-                for prod_chosen in prods_chosen:
-                    if prod_chosen.top.intersects(prod.top_from_top_probe_buffer):
-                        valid = False
-                        break
-                if valid == False:
-                    continue
-            
-            if valid == True:
-                prods_chosen.append(prod)
-                chromosome_x.append(prod.x)
-                chromosome_y.append(prod.y)
-                chromosome_rod_type.append(4)
-                chromosome_on.append(on)
+            prods_chosen.append(prod)
+            chromosome_x.append(prod.x)
+            chromosome_y.append(prod.y)
+            chromosome_rod_type.append(4)
+            chromosome_on.append(on)
                 
         return chromosome_x, chromosome_y, chromosome_rod_type, chromosome_on
     
@@ -1736,7 +1627,7 @@ def create_chromosome_v3(nprods_top, nstandoffs, top_constraints, bot_constraint
     if standoff_dist == None:
         chromosome_x_bot, chromosome_y_bot, chromosome_rod_type_bot, chromosome_on_bot = place_pressure_rods(nstandoffs, 2, pBoards_multi_bot, bot_probes, botcomponents)
     else:
-        chromosome_x_bot, chromosome_y_bot, chromosome_rod_type_bot, chromosome_on_bot = place_standoffs(nprods_top, 2, pBoards_multi_bot, bot_probes, botcomponents, chromosome_x_top, chromosome_y_top, standoff_dist)
+        chromosome_x_bot, chromosome_y_bot, chromosome_rod_type_bot, chromosome_on_bot = place_standoffs(nstandoffs, 2, pBoards_multi_bot, bot_probes, botcomponents, chromosome_x_top, chromosome_y_top, standoff_dist)
     
     
     chromosome = []
