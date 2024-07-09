@@ -127,72 +127,89 @@ def crossover_prods(pop, crossover_rate, nprods_top, nprods_bot, top_constraints
                     continue
                 else:
                     child_prods[j] = copy.deepcopy(parent2_prod)
-            
-            
-            # ##### SIMPLE BRUTE FORCE METHOD FOR PROD CROSSOVER #####
-            # for j in range(len(child_prods)):
-            #     if j <= crossover_point:
-            #         child_prods[j] = copy.deepcopy(parent1_prods[j])
-            #     else:
-            #         child_prods[j] = copy.deepcopy(parent2_prods[j])
                     
-            # # Compare all combinations of pressure rods to see if there are 
-            # # any distances less than the .ctc parameter
-            # combos = []
-            # for r in range(len(child_prods)):
-            #     combos.extend(itertools.combinations(child_prods,2))
-            
-            # for combo in combos:
-            #     dist = constraints.centroid_distance(combo[0].tip, combo[1].tip)
-            #     if dist < combo[0].ctc or dist < combo[1].ctc:
-            #         complete = False
-            #         break
-            # if complete is False:
-            #     print(f"Failed attempt at crossover for child {i}")
-            #     continue
-            
-            # ##### ORIGINAL CROSSOVER METHOD FOR PRODS #####
-            # for j in range(0, crossover_point):
-            #     # Get gene at position j from parent 2
-            #     child_prods[j] = copy.deepcopy(parent2_prods[j])
+            # # If there is a specified standoff_dist, then additional checks must be made
+            # # on the standoff positions.
+            # if standoff_dist is not None:
+            #     pBoards_multi = bot_constraints[0]
+            #     # top_probes = top_constraints[1]
+            #     # topcomponents = top_constraints[2]
+            #     bot_probes = bot_constraints[1]
+            #     botcomponents = bot_constraints[2]
                 
-            #     # Check if the current potentially crossed gene violates any
-            #     # other genes, and if so, replace that gene instead of gene j
-            #     n_violated = 0
-            #     idx_violated = []
-            #     for k,prod in enumerate(child_prods):
-            #         if k == j:
-            #             continue
-            #         # Don't compare distances for pressure rods that are top side versus bottom side
-            #         if j < nprods_top and k >= nprods_top:
-            #             continue
-            #         if j >= nprods_top and k < nprods_top:
-            #             continue
-            #         dist = constraints.centroid_distance(child_prods[j].tip, prod.tip)
-            #         if dist < prod.ctc:
-            #             n_violated += 1
-            #             idx_violated.append(k)
-            #     if n_violated == 0:
-            #         continue
-            #     elif n_violated == 1:
-            #         child_prods[j] = parent1_prods[j]
-            #         child_prods[idx_violated[0]] = parent2_prods[j]
-            #     else:
-            #         continue
-            
-            # ########### Double check that all pressure rods are adequately spaced
-            # combos = []
-            # for r in range(len(child_prods)):
-            #     combos.extend(itertools.combinations(child_prods,2))
-            
-            # for combo in combos:
-            #     dist = constraints.centroid_distance(combo[0].tip, combo[1].tip)
-            #     if dist < combo[0].ctc or dist < combo[1].ctc:
-            #         complete = False
-            #         break
-            # if complete is False:
-            #     print(f"Failed attempt at crossover for child {i}")
-            #     continue
+                
+            #     standoff_dists = []
+            #     min_dist_inds = []
+            #     valid_standoffs = []
+            #     associated_prods = []
+            #     for j in range(nprods_top, nprods_top + nprods_bot):
+            #         min_dist = 10000.0
+            #         min_dist_ind = 0
+            #         for k in range(0, nprods_top):
+            #             dist = constraints.centroid_distance(child_prods[j].tip, child_prods[k].tip)
+            #             if dist < min_dist:
+            #                 min_dist = dist
+            #                 min_dist_ind = k
+            #         standoff_dists.append(min_dist)
+            #         min_dist_inds.append(min_dist_ind)
+            #         if min_dist <= standoff_dist:
+            #             valid_standoffs.append(j)
+            #             associated_prods.append(k)
+                    
+            #     for j,dist in enumerate(standoff_dists):
+            #         if dist > standoff_dist:
+            #             while True:
+            #                 # Randomly choose a new pressure rod to associate a standoff with
+            #                 while True:
+            #                     ref_index = random.randint(0,nprods_top-1)
+            #                     if ref_index in associated_prods:
+            #                         continue
+            #                     else:
+            #                         associated_prods.append(ref_index)
+            #                         break
+                            
+            #                 xref = child_prods[ref_index].x
+            #                 yref = child_prods[ref_index].y
+                            
+            #                 # Create the beginning of the available area by creating a circle
+            #                 # polygon with the necessary size to place the standoff in the
+            #                 # allowable area
+            #                 rcircle = standoff_dist + 0.15/2
+            #                 circle = constraints.place_circle(xref, yref, rcircle)
+                            
+            #                 # Get the intersection of the circle with the UUT
+            #                 circle_UUT = circle.intersection(pBoards_multi)
+                            
+            #                 # Get the difference of the circle with any bottom side probes
+            #                 # (buffers accounted for)
+            #                 circle_probes = circle_UUT.difference(bot_probes.buffer(0.125))
+                            
+            #                 # Get the difference of the circle with any bottom side components
+            #                 # (buffers accounted for)
+            #                 circle_components = circle_probes.difference(botcomponents.buffer(0.035))
+                            
+            #                 circle_bounds = circle_components.bounds    # (minx, miny, maxx, maxy)
+                            
+            #                 max_tries = 300
+            #                 max_tries_reached = False
+            #                 for i in range(max_tries):
+            #                     x = random.uniform(circle_bounds[0], circle_bounds[2])
+            #                     y = random.uniform(circle_bounds[1], circle_bounds[3])
+                                
+            #                     prod = constraints.PressureRod(x,y,'ESD board stop',1)
+                                
+            #                     if prod.tip.within(circle_components):
+            #                         break
+            #                     if i == max_tries-1:
+            #                         max_tries_reached = True
+                                    
+            #                 if max_tries_reached:
+            #                     continue
+                            
+            #                 child_prods[nprods_top + j] = prod
+            #                 break
+                                
+                        
             
             # Validate that at least one gene has been changed
             for j in range(len(child_prods)):
@@ -944,7 +961,7 @@ def evaluation(pop, gen, maxgen, nprods_top, nprods_bot, inputfile, constraint_g
     
     
     # Add verification here that all output files have been created. If any have not been created, run those FEA cases specifically.
-    time.sleep(30)
+    time.sleep(45)
     # FIXME: Either here or elsewhere, the code is allowing pressure rods to be placed where they are not allowed. This causes FEA to fail.
     while True:
         # Get directory to search for output
@@ -986,9 +1003,24 @@ def evaluation(pop, gen, maxgen, nprods_top, nprods_bot, inputfile, constraint_g
         results_report_all.append(results_report)
         results_mesh_all.append(results_mesh)
     
+    standoff_sum_dists = constraints.get_sum_min_standoff_dists(pop, nprods_top, nprods_bot)
+    standoff_sum_dists = np.array(standoff_sum_dists)
+    standoff_sum_dists = standoff_sum_dists[:, None]
+    
     fitness_values = np.array(results)
     fitness_report = np.array(results_report_all)
     fitness_mesh = np.array(results_mesh_all)
+    
+    fitness_values_range = np.max(fitness_values) - np.min(fitness_values)
+    fitness_report_range = np.max(fitness_report) - np.min(fitness_report)
+    fitness_mesh_range = np.max(fitness_mesh) - np.min(fitness_mesh)
+    
+    # Scale standoff_sum_dists to match the largest ranging variables
+    standoff_factor_values = 
+    
+    fitness_values = np.hstack((fitness_values, standoff_sum_dists))
+    fitness_report = np.hstack((fitness_report, standoff_sum_dists))
+    fitness_mesh = np.hstack((fitness_mesh, standoff_sum_dists))
     
     # ###########################################
     # # Try using only the first three objectives
@@ -1242,11 +1274,11 @@ def main_optimization():
     
     # Parameters
     print("Setting genetic algorithm parameters")
-    pop_size = 20              # initial number of chromosomes
-    rate_crossover = 30         # number of chromosomes that we apply crossover to
-    rate_mutation = 20         # number of chromosomes that we apply mutation to
+    pop_size = 5              # initial number of chromosomes
+    rate_crossover = 5         # number of chromosomes that we apply crossover to
+    rate_mutation = 5         # number of chromosomes that we apply mutation to
     chance_mutation = 0.2       # normalized percent chance that an individual pressure rod will be mutated
-    n_searched = 20             # number of chromosomes that we apply local_search to
+    n_searched = 5             # number of chromosomes that we apply local_search to
     chance_localsearch = 0.2
     on_prob_initial = 0.5   # Initial percentage chance that a pressure rod will be on (only in the initial population)
     on_prob = 0.8           # Likelihood an "off" pressure rod will be switched on
@@ -1293,8 +1325,8 @@ def main_optimization():
     pop = constraints.initialize_population_simple_v3(pop_size, nprods_top, nstandoffs, top_constraints, bot_constraints, all_on, on_prob, rod_type, standoff_dist)    # initial parents population P
     
     # Plot the designs
-    for chromosome in pop:
-        constraints.plot_chromosome(chromosome, top_constraints, bot_constraints, nprods_top, nstandoffs)
+    # for chromosome in pop:
+    #     constraints.plot_chromosome(chromosome, top_constraints, bot_constraints, nprods_top, nstandoffs)
         
     pop = np.asarray(pop)
     print(f'Initial random population size:\t{pop.shape[0]}')
@@ -1350,7 +1382,7 @@ def main_optimization():
         
         print("Evaluating fitnesses...")
         fitness_values, fitness_report, fitness_mesh = evaluation(pop, i, maximum_generation, nprods_top, nstandoffs, inputfile, constraint_geom, all_on, on_prob, rod_type, standoff_dist)
-        fitness_values_temp = copy.deepcopy(fitness_values)
+        fitness_values_temp = copy.deepcopy(fitness_values) # NOTE: Change the input variable here to select which method is being used
         genvals = i*np.ones((fitness_values_temp.shape[0],1))
         fitness_values_temp = np.append(fitness_values_temp, genvals, axis=1) # Add the generation number as a column for later referencing
         if i == 0:

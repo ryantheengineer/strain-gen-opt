@@ -1537,7 +1537,7 @@ def create_chromosome_v3(nprods_top, nstandoffs, top_constraints, bot_constraint
                 chromosome_rod_type.append(rod_type_i)
                 chromosome_on.append(on)
                 
-        return chromosome_x, chromosome_y, chromosome_rod_type, chromosome_on
+        return (chromosome_x, chromosome_y, chromosome_rod_type, chromosome_on)
     
     
     def place_standoffs(nprods, sidenum, pBoards_multi, side_probes, sidecomponents, chromosome_x_top, chromosome_y_top, standoff_dist):
@@ -1575,7 +1575,8 @@ def create_chromosome_v3(nprods_top, nstandoffs, top_constraints, bot_constraint
                     break
             
             if len(indices_used) == len(chromosome_x_top):
-                raise Exception('Max tries reached on more pressure rods than are available. Consider adjusting inputs.')
+                # raise Exception('Max tries reached on more pressure rods than are available. Consider adjusting inputs.')
+                return None
             
             xref = chromosome_x_top[ref_index]
             yref = chromosome_y_top[ref_index]
@@ -1599,7 +1600,7 @@ def create_chromosome_v3(nprods_top, nstandoffs, top_constraints, bot_constraint
             
             circle_bounds = circle_components.bounds    # (minx, miny, maxx, maxy)
             
-            max_tries = 100
+            max_tries = 300
             max_tries_reached = False
             for i in range(max_tries):
                 x = random.uniform(circle_bounds[0], circle_bounds[2])
@@ -1621,13 +1622,20 @@ def create_chromosome_v3(nprods_top, nstandoffs, top_constraints, bot_constraint
             chromosome_rod_type.append(4)
             chromosome_on.append(on)
                 
-        return chromosome_x, chromosome_y, chromosome_rod_type, chromosome_on
+        return (chromosome_x, chromosome_y, chromosome_rod_type, chromosome_on)
     
-    chromosome_x_top, chromosome_y_top, chromosome_rod_type_top, chromosome_on_top = place_pressure_rods(nprods_top, 1, pBoards_multi_top, top_probes, topcomponents)
-    if standoff_dist == None:
-        chromosome_x_bot, chromosome_y_bot, chromosome_rod_type_bot, chromosome_on_bot = place_pressure_rods(nstandoffs, 2, pBoards_multi_bot, bot_probes, botcomponents)
-    else:
-        chromosome_x_bot, chromosome_y_bot, chromosome_rod_type_bot, chromosome_on_bot = place_standoffs(nstandoffs, 2, pBoards_multi_bot, bot_probes, botcomponents, chromosome_x_top, chromosome_y_top, standoff_dist)
+    while True:
+        chromosome_x_top, chromosome_y_top, chromosome_rod_type_top, chromosome_on_top = place_pressure_rods(nprods_top, 1, pBoards_multi_top, top_probes, topcomponents)
+        if standoff_dist == None:
+            chromosome_x_bot, chromosome_y_bot, chromosome_rod_type_bot, chromosome_on_bot = place_pressure_rods(nstandoffs, 2, pBoards_multi_bot, bot_probes, botcomponents)
+        else:
+            standoffs_result = place_standoffs(nstandoffs, 2, pBoards_multi_bot, bot_probes, botcomponents, chromosome_x_top, chromosome_y_top, standoff_dist)
+            if standoffs_result is None:
+                continue
+            else:
+                chromosome_x_bot, chromosome_y_bot, chromosome_rod_type_bot, chromosome_on_bot = standoffs_result
+                break
+            # chromosome_x_bot, chromosome_y_bot, chromosome_rod_type_bot, chromosome_on_bot = place_standoffs(nstandoffs, 2, pBoards_multi_bot, bot_probes, botcomponents, chromosome_x_top, chromosome_y_top, standoff_dist)
     
     
     chromosome = []
@@ -1860,6 +1868,39 @@ def initialize_population_simple_v3(npop, nprods_top, nstandoffs, top_constraint
         initial_population.append(create_chromosome_v3(nprods_top, nstandoffs, top_constraints, bot_constraints, all_on, on_prob, rod_type, standoff_dist))
         print(f"Chromosome {i} of {npop} created")
     return initial_population
+
+def get_sum_min_standoff_dists(pop, nprods_top, nstandoffs):
+    standoff_sum_dists = []
+    for chromosome in pop:
+        prods_x = []
+        prods_y = []
+        standoffs_x = []
+        standoffs_y = []
+        dists = []
+        
+        for i in range(len(chromosome)):
+            if i < nprods_top:
+                prods_x.append(chromosome[i])
+            elif i >= nprods_top and i < (nprods_top + nstandoffs):
+                standoffs_x.append(chromosome[i])
+            elif i >= (nprods_top + nstandoffs) and i < (2*nprods_top + nstandoffs):
+                prods_y.append(chromosome[i])
+            elif i >= (2*nprods_top + nstandoffs) and i < (2*nprods_top + 2*nstandoffs):
+                standoffs_y.append(chromosome[i])
+            else:
+                break
+        
+        for i in range(nstandoffs):
+            dists_temp = []
+            for j in range(nprods_top):
+                dist_temp = np.sqrt((prods_x[j]-standoffs_x[i])**2 + (prods_y[j]-standoffs_y[i])**2)
+                dists_temp.append(dist_temp)
+            dists.append(min(dists_temp))
+            
+        standoff_sum_dists.append(sum(dists))
+        
+    return standoff_sum_dists
+                
 
 # def interpret_chromosome_to_prods(chromosome, nprods):    
 #     prods = []
