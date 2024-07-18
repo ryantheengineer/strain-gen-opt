@@ -1005,28 +1005,31 @@ def evaluation(pop, gen, maxgen, nprods_top, nprods_bot, inputfile, constraint_g
     
     standoff_sum_dists = constraints.get_sum_min_standoff_dists(pop, nprods_top, nprods_bot)
     standoff_sum_dists = np.array(standoff_sum_dists)
+    avg_standoff_sum_dists = np.mean(standoff_sum_dists)
     standoff_sum_dists = standoff_sum_dists[:, None]
     
     fitness_values = np.array(results)
     fitness_report = np.array(results_report_all)
     fitness_mesh = np.array(results_mesh_all)
     
-    fitness_values_range = np.max(fitness_values) - np.min(fitness_values)
-    fitness_report_range = np.max(fitness_report) - np.min(fitness_report)
-    fitness_mesh_range = np.max(fitness_mesh) - np.min(fitness_mesh)
-    
     # Scale standoff_sum_dists to match the largest ranging variables
-    standoff_factor_values = 
+    max_avg_fitness_values = max(np.mean(fitness_values, axis=0))
+    max_avg_fitness_report = max(np.mean(fitness_report, axis=0))
+    max_avg_fitness_mesh = max(np.mean(fitness_mesh, axis=0))
+    
+    standoff_factor = max_avg_fitness_values / avg_standoff_sum_dists
+    
+    standoff_sum_dists = standoff_sum_dists * standoff_factor
+    
+    ###########################################
+    # Try using only the first three objectives and the standoff distances
+    fitness_values = fitness_values[:,0:3]
+    # fitness_report = fitness_report[:,0:3]
+    # fitness_mesh = fitness_mesh[:,0:3]
     
     fitness_values = np.hstack((fitness_values, standoff_sum_dists))
     fitness_report = np.hstack((fitness_report, standoff_sum_dists))
-    fitness_mesh = np.hstack((fitness_mesh, standoff_sum_dists))
-    
-    # ###########################################
-    # # Try using only the first three objectives
-    # fitness_values = fitness_values[:,0:3]
-    # fitness_report = fitness_report[:,0:3]
-    # fitness_mesh = fitness_mesh[:,0:3]
+    fitness_mesh = np.hstack((fitness_mesh, standoff_sum_dists))    
     
     return fitness_values, fitness_report, fitness_mesh
 
@@ -1274,26 +1277,26 @@ def main_optimization():
     
     # Parameters
     print("Setting genetic algorithm parameters")
-    pop_size = 5              # initial number of chromosomes
-    rate_crossover = 5         # number of chromosomes that we apply crossover to
-    rate_mutation = 5         # number of chromosomes that we apply mutation to
+    pop_size = 20              # initial number of chromosomes
+    rate_crossover = 20         # number of chromosomes that we apply crossover to
+    rate_mutation = 20         # number of chromosomes that we apply mutation to
     chance_mutation = 0.2       # normalized percent chance that an individual pressure rod will be mutated
-    n_searched = 5             # number of chromosomes that we apply local_search to
+    n_searched = 20             # number of chromosomes that we apply local_search to
     chance_localsearch = 0.2
     on_prob_initial = 0.5   # Initial percentage chance that a pressure rod will be on (only in the initial population)
     on_prob = 0.8           # Likelihood an "off" pressure rod will be switched on
     perturbrate = 1.0
     maxmag = 1.0             # coordinate displacement during local_search
     typerate = 0.1
-    maximum_generation = 24    # number of iterations
+    maximum_generation = 20    # number of iterations
     # nobjs = 5
     
     end_early = True
     # FIXME: Add ability to pickle the variables needed to continue an optimization later
     
     # nprods = 64
-    nprods_top = 10
-    nstandoffs = 10
+    nprods_top = 50
+    nstandoffs = 40
     print(f"nprods_small = {nprods_small}")
     print(f"nprods_large = {nprods_large}")
     nprods_top_input = input(f"Current nprods_top: {nprods_top}\n If this quantity is adequate press enter. Otherwise choose an integer value and press enter.\n")
@@ -1437,16 +1440,20 @@ def main_optimization():
             plt.scatter([0],best_overall_fitnesses[0][0], label="Max strain xx")
             plt.scatter([0],best_overall_fitnesses[0][1], label="Max strain yy")
             plt.scatter([0],best_overall_fitnesses[0][2], label="Max strain xy")
-            plt.scatter([0],best_overall_fitnesses[0][3], label="Max principal strain min")
-            plt.scatter([0],best_overall_fitnesses[0][4], label="Max principal strain max")
+            # plt.scatter([0],best_overall_fitnesses[0][3], label="Max principal strain min")
+            # plt.scatter([0],best_overall_fitnesses[0][4], label="Max principal strain max")
+            # plt.scatter([0],best_overall_fitnesses[0][5], label="Sum standoff distances scaled")
+            plt.scatter([0],best_overall_fitnesses[0][3], label="Sum standoff distances scaled")
         else:
             best_overall_fitnesses = np.asarray(best_overall_fitnesses)
             gen_ints = [val for val in range(0, i+1)]
             plt.plot(gen_ints, best_overall_fitnesses[:,0], label="Max strain xx")
             plt.plot(gen_ints, best_overall_fitnesses[:,1], label="Max strain yy")
             plt.plot(gen_ints, best_overall_fitnesses[:,2], label="Max strain xy")
-            plt.plot(gen_ints, best_overall_fitnesses[:,3], label="Max principal strain min")
-            plt.plot(gen_ints, best_overall_fitnesses[:,4], label="Max principal strain max")
+            # plt.plot(gen_ints, best_overall_fitnesses[:,3], label="Max principal strain min")
+            # plt.plot(gen_ints, best_overall_fitnesses[:,4], label="Max principal strain max")
+            # plt.plot(gen_ints, best_overall_fitnesses[:,5], label="Sum standoff distances scaled")
+            plt.plot(gen_ints, best_overall_fitnesses[:,3], label="Sum standoff distances scaled")
             best_overall_fitnesses = list(best_overall_fitnesses)
         plt.title(f"Generation: {i}")
         plt.legend()
@@ -1468,8 +1475,11 @@ def main_optimization():
                     print(f"Strain xx:\t{fitness_report[index][0]}")
                     print(f"Strain yy:\t{fitness_report[index][1]}")
                     print(f"Strain xy:\t{fitness_report[index][2]}")
-                    print(f"Principal strain min:\t{fitness_report[index][3]}")
-                    print(f"Principal strain max:\t{fitness_report[index][4]}")
+                    # print(f"Principal strain min:\t{fitness_report[index][3]}")
+                    # print(f"Principal strain max:\t{fitness_report[index][4]}")
+                    print(f"Sum standoff distances scaled:\t{fitness_report[index][3]}")
+                    
+                    
                     # print(f"Strain xx:\t{fitness_values[index][0]}")
                     # print(f"Strain yy:\t{fitness_values[index][1]}")
                     # print(f"Strain xy:\t{fitness_values[index][2]}")
@@ -1498,7 +1508,8 @@ def main_optimization():
             break
     
     # 3D plot of optimization progression
-    colnames = ["Strain_xx", "Strain_yy", "Strain_xy", "Principal_Strain_Min", "Principal_Strain_Max", "Generation"]
+    colnames = ["Strain_xx", "Strain_yy", "Strain_xy", "Sum Standoff Dist Scaled", "Generation"]
+    # colnames = ["Strain_xx", "Strain_yy", "Strain_xy", "Principal_Strain_Min", "Principal_Strain_Max", "Generation"]
     df_fitness_values = pd.DataFrame(complete_fitness_values, columns=colnames)
     
     
