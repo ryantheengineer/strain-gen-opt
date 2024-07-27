@@ -22,6 +22,7 @@ from shapely.ops import nearest_points
 import plotly.express as px
 import itertools
 from itertools import permutations
+import pathlib
 
 # MINIMIZATION
 
@@ -907,6 +908,7 @@ def evaluation(pop, gen, maxgen, nprods_top, nprods_bot, inputfile, constraint_g
         DESCRIPTION.
 
     """
+    global start_time
     evaluation_start = datetime.now()
     
     # Read in constraint_geom (output of constraints.get_constraint_geometry())
@@ -961,13 +963,74 @@ def evaluation(pop, gen, maxgen, nprods_top, nprods_bot, inputfile, constraint_g
     
     
     # Add verification here that all output files have been created. If any have not been created, run those FEA cases specifically.
-    time.sleep(45)
+    time.sleep(15)
     # FIXME: Either here or elsewhere, the code is allowing pressure rods to be placed where they are not allowed. This causes FEA to fail.
     while True:
         # Get directory to search for output
         path, filename = os.path.split(inputfile)
         output_dir = os.path.join(path, "Output")
         missing_iterations = list(np.where(results_mp)[0])
+        
+        
+        ####### NEW CODE #######
+        # Check for any missing output files that may have been missed in the
+        # FEA exit code check, and add any unique iteration numbers to
+        # missing_iterations
+        check_directory = pathlib.Path(inputfile)
+        check_directory = str(check_directory.parent) + "\\Output"
+        
+        # Get list of directories in temp_directory
+        output_directories = os.listdir(check_directory)
+        for i,directory in enumerate(output_directories):
+            output_directories[i] = os.path.join(check_directory, directory)
+        
+        timestamps = []
+        for directory in output_directories:
+            timestamps.append(datetime.fromtimestamp(os.path.getmtime(directory)))
+            
+        # Filter the indices for timestamps that are later than start_time, then
+        # look in the corresponding directories to make sure all necessary files
+        # were created
+        check_data = {'timestamps': timestamps,
+                     'directories': output_directories}
+        df_check = pd.DataFrame(check_data)
+        df_check = df_check[df_check['timestamps'] > datetime.fromtimestamp(start_time)]
+        
+        other_missing_iterations = []
+        check_files = ['FEA.log',
+                       'FEA.xml',
+                       'FEA_AllMeshNodes.csv',
+                       'FEA_MeshElements.csv',
+                       'FEA_MeshNodes.csv',
+                       'FEAFilteredReport.csv',
+                       'FEARawReport.csv',
+                       'FEAReport.csv']
+        for i,directory in enumerate(df_check['directories']):
+            # Open directory and see if the expected files exist
+            for file in check_files:
+                check_path = os.path.join(directory, file)
+                if not os.path.exists(check_path):
+                    print(f'Missing output file {check_path} discovered')
+                    other_missing_iterations.append(i)
+                    break
+                
+        # Unify other_missing_iterations and missing_iterations
+        missing_iterations = missing_iterations + other_missing_iterations
+        missing_iterations = set(missing_iterations)
+        missing_iterations = list(missing_iterations)
+                    
+        
+        ####### END NEW CODE #######
+        
+        # temp_path, temp_filename = os.path.split(inputfile)
+        # temp_filename = os.path.splitext(temp_filename)[0]
+        
+        
+        # # Get the most recently modified subdirectory that matches the needed substring from the inputfile
+        # latest_subdir = runFEA.find_latest_folder_with_substring(temp_path, temp_filename)
+        
+        # meshfile = latest_subdir + "\\FEAFilteredReport.csv"
+        # # meshfile = latest_subdir + "\\FEAReport.csv"
         
         # If there are any failed FEA cases, generate new designs and run those
         if missing_iterations:
@@ -1246,6 +1309,7 @@ def main_optimization():
         Array where each row is a single chromosome, or design.
 
     """
+    global start_time
     start_time = time.time()
     # Initial setup
     print("Initial setup - reading in constraints")
@@ -1296,7 +1360,7 @@ def main_optimization():
     
     # nprods = 64
     nprods_top = 50
-    nstandoffs = 40
+    nstandoffs = 12
     print(f"nprods_small = {nprods_small}")
     print(f"nprods_large = {nprods_large}")
     nprods_top_input = input(f"Current nprods_top: {nprods_top}\n If this quantity is adequate press enter. Otherwise choose an integer value and press enter.\n")

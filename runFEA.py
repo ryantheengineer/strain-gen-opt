@@ -198,7 +198,7 @@ def resultsToDataframe_report(inputfile):
 
     """
     directory = pathlib.Path(inputfile)
-    directory = str(directory.parent) + "/Output"
+    directory = str(directory.parent) + "\\Output"
     path, filename = os.path.split(inputfile)
     filename = os.path.splitext(filename)[0]
     
