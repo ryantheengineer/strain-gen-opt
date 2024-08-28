@@ -1,0 +1,53 @@
+###############################################################################
+Quick Start for Genetic Algorithm Optimization of Bed of Nails Test Layout
+###############################################################################
+
+###############
+Pre-requisites:
+###############
+
+Clone the repository https://github.com/ryantheengineer/strain-gen-opt and
+navigate to the dev branch.
+
+Make sure the MATLAB runtime is installed and that the splash screen image has
+been deleted.
+
+########################
+Running an Optimization:
+########################
+
+Open optimize.py and scroll to the function main_optimization(), near the
+end of the script. If the parameters under the comment # Parameters are
+appropriate, run the script. A file selection window will open, where you may
+select the XML input file with the design. The code expects a design that
+already has some pressure rods and standoffs placed.
+
+############
+Adjustments:
+############
+
+If the optimization routine needs tuning to the specific problem, the
+parameters under the comment "# Parameters" down through standoff_dist can
+all be adjusted depending on the needs of a particular design.
+
+The first parameters to change are the number of pressure rods and the number
+of standoffs (nprods_top and nstandoffs). Especially when all_on = True, this
+will greatly influence the success or failure of your design. If these numbers
+are too high, it is sometimes possible to get the optimization stuck in a loop
+trying to place components.
+
+The next parameters to adjust are the genetic algorithm parameters, directly
+under the #Parameters heading. These are documented with explanatory comments,
+but a few notes you should be aware of:
+
+1. pop_size must be <= to the sum of rate_crossover, rate_mutation, and
+   n_searched. The ratio between pop_size and the sum of the other values will
+   apply the selection pressure that guides the optimization. Aim for pop_size
+   to be less than half of the sum of the other values.
+2. maxmag is the maximum distance a component may be displaced during local
+   search methods. 1.0 may be sufficient for most PCBs, but in a small PCB that
+   may be too large for an effective local search.
+3. standoff_dist controls the maximum allowable distance a standoff may be from
+   its closest neighboring pressure rod. This is to allow a degree of
+   flexibility to the placement while effectively constraining standoffs to
+   be directly under pressure rods.
